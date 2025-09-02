@@ -1,0 +1,79 @@
+Workflow instance sample -  Key: workflow_instance:123456
+
+{
+  "definition": {
+    "hooks": {
+      "on_start": "",
+      "on_complete": "",
+      "on_failure": ""
+    },
+    "steps": [
+      {
+        "step_instance_id": "step_instance:abc111",
+        "definition": {
+          "class": "NotificationStep",
+          "type": "send_notification",
+          "steps": []
+        }
+      },
+      {
+        "step_instance_id": "step_instance:def222",
+        "definition": {
+          "class": "FinalizeOrderStep",
+          "type": "finalize_order",
+          "steps": []
+        }
+      }
+    ]
+  },
+  "data": {
+    "payload": {
+      "orderId": "ORD-1234567",
+      "customerId": "CUST-89101",
+      "bookingTime": "2025-08-21T14:25:36Z"
+    },
+    "workflow_instance_id": "workflow_instance:123456",
+    "request_id": "req-xyz-789"
+  },
+  "metadata": {
+    "start_time": "2025-08-21T14:25:36Z",
+    "end_time": "",
+    "status": "pending",
+    "current_step": "step_instance:abc111"
+  }
+}
+
+
+ Step data sample - Key: step_instance:abc111
+
+
+{
+  "definition": {
+    "class": "NotificationStep",
+    "type": "send_notification",
+    "steps": []
+  },
+  "data": {
+    "config": {
+      "template": "booking_confirmation",
+      "priority": "high"
+    },
+    "metadata": {
+      "orderId": "ORD-1234567",
+      "customerId": "CUST-89101"
+    }
+  },
+  "metadata": {
+    "start_time": "",
+    "end_time": "",
+    "status": "pending"
+  }
+}
+
+Queue Sample - worker_instance:inst_1:queue
+
+{
+  "workflow_instance_id": "workflow_instance:123456",
+  "step": "send_notification",
+  "step_instance_id": "step_instance:abc111"
+}

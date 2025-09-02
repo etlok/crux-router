@@ -1,0 +1,4 @@
+//workflow_instance:<id>:steps
+[
+  "step_instance:<step instance id>"
+]

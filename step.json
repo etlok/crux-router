@@ -1,0 +1,18 @@
+//step_instance:<step instance id>
+{
+  "definition": {
+    "class": "",
+    "type": "",
+    "steps": [
+
+    ]
+  },
+  "data": {
+    //step specific data
+  },
+  "metadata":{
+    "start_time": "",
+    "end_time": "",
+    "status": ""
+  }
+}

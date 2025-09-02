@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>WebSocket Test</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  </head>
+  <body>
+    <script>
+      const socket = io('http://localhost:3000');
+
+      socket.on('connect', () => {
+        console.log('Connected:', socket.id);
+
+        // Send an event to the server
+        socket.emit('incoming_event', { message: 'Hello from client' });
+      });
+
+      // Listen for responses
+      socket.on('outgoing_event', (data) => {
+        console.log('Received from server:', data);
+      });
+
+      socket.on('disconnect', () => {
+        console.log('Disconnected');
+      });
+    </script>
+  </body>
+</html>

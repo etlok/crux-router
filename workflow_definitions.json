@@ -1,0 +1,57 @@
+{
+  "event:post_booking_flow": {
+    "middleware": [],
+    "outcome": [
+      {
+        "outcome_id": 1,
+        "type": "send_notification",
+        "workflow": "send_notification_after_booking",
+        "workflow_id": 12,
+        "config": {
+          "template": "booking_confirmation",
+          "priority": "high"
+        }
+      },
+      {
+        "outcome_id": 2,
+        "type": "update_inventory",
+        "workflow": "update_product_stock",
+        "workflow_id": 14,
+        "config": {
+          "operation": "decrement",
+          "log_activity": true
+        }
+      }
+    ]
+  },
+
+  "workflow:send_notification_after_booking": {
+    "workflow_id": 12,
+    "timeout_ms": 5000,
+    "workers":{
+ "worker_notify_customers": { "instance_id": "inst_1", "threads": 2 },
+    "worker_notify_777": { "instance_id": "inst_2", "threads": 1 }
+    }
+  },
+
+  "workflow:update_product_stock": {
+    "workflow_id": 14,
+  "workers": {
+   
+    "worker_db_updater": { "instance_id": "inst_3", "threads": 3 },
+    "worker_inventory_manager": { "instance_id": "inst_4", "threads": 2 }
+  },
+      "timeout_ms": 3000
+  }
+
+
+}
+
+ZADD workflow:send_notification_after_booking:workers 2 worker_notify_customers 1 worker_notify_777
+ZADD workflow:update_product_stock:workers 3 worker_db_updater 2 worker_inventory_manager
+
+HMSET worker:worker_notify_customers instance_id inst_1 threads 2
+HMSET worker:worker_notify_777 instance_id inst_2 threads 1
+HMSET worker:worker_db_updater instance_id inst_3 threads 3
+HMSET worker:worker_inventory_manager instance_id inst_4 threads 2
+
