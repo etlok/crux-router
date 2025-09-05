@@ -1,12 +1,30 @@
-import { Module } from '@nestjs/common';
+import { DynamicModule, Module } from '@nestjs/common';
 import { KafkaService } from './kafka.service';
 import { KafkaController } from './kafka.controller';
 import { RedisService } from 'src/redis/redis.service';
 import { RouterService } from 'src/router/router.service';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { NoopKafkaService } from './noop-kafka.sevice';
 
-@Module({
-  providers: [KafkaService, RedisService, RouterService],
-  controllers: [KafkaController],
-  exports: [KafkaService],
-})
-export class KafkaModule {}
+@Module({})
+export class KafkaModule {
+  static register(): DynamicModule {
+    return {
+      module: KafkaModule,
+      imports: [ConfigModule],
+      providers: [
+        {
+          provide: KafkaService,
+          useFactory: (configService: ConfigService) => {
+            if (!configService.get('features.enableKafka')) {
+              return new NoopKafkaService();
+            }
+         
+          },
+          inject: [ConfigService],
+        },
+      ],
+      exports: [KafkaService],
+    };
+  }
+}

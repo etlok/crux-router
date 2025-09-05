@@ -1,11 +1,11 @@
 import { Controller, Post, Body } from '@nestjs/common';
 import { RedisService } from 'src/redis/redis.service';
-import { AppGateway } from '../websocket/websocket.gateway';
+import { WSGateway } from '../websocket/websocket.gateway';
 import { RouterService } from 'src/router/router.service';
 
 @Controller('events')
 export class ApiController {
-  constructor(private redisService: RedisService, private webSocketGateway : AppGateway, private routerService:RouterService) {}
+  constructor(private redisService: RedisService, private webSocketGateway : WSGateway, private routerService:RouterService) {}
 
   @Post()
   async handleIncoming(@Body() data: any) {

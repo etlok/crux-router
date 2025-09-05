@@ -9,15 +9,16 @@ import { RouterModule } from './router/router.module';
 import { KafkaModule } from './sources/kafka/kafka.module';
 import { WebsocketModule } from './sources/websocket/websocket.module';
 import { RouterService } from './router/router.service';
+import { ClientAuthService } from './sources/websocket/client-auth.service';
 
 @Module({
-  imports: [RedisModule,RouterModule,KafkaModule, WebsocketModule,
+  imports: [RedisModule,RouterModule, WebsocketModule,
     ConfigModule.forRoot({
       isGlobal: true,
       load: [redisConfig],
-    }),
+    }), KafkaModule.register()
   ],
     controllers: [ApiController],
-  providers: [WSGateway, RedisService, RouterService],
+  providers: [WSGateway, RedisService, RouterService, ClientAuthService],
 })
 export class AppModule {}

@@ -1,10 +1,12 @@
 import { Module } from '@nestjs/common';
-import { AppGateway } from './websocket.gateway';
+import { WSGateway } from './websocket.gateway';
 import { RedisService } from 'src/redis/redis.service';
 import { RouterService } from 'src/router/router.service';
+import { ClientAuthService } from './client-auth.service';
 
 @Module({
-  providers: [AppGateway, RedisService, RouterService],
-  exports: [AppGateway],
+  providers: [WSGateway, RedisService, RouterService, ClientAuthService],
+  exports: [WSGateway],
+  
 })
 export class WebsocketModule {}
