@@ -73,18 +73,18 @@ private connectedClients = new Set<string>();
     }
   }
 
- handleConnection(client: Socket) {
-    // Get client ID from handshake
-    const clientId = client.handshake.auth.clientId || 
-                    client.handshake.headers['x-client-id'];
+ async handleConnection(client: Socket) {
+    // Get JWT token from handshake
+    const token = client.handshake.auth.token || 
+                  client.handshake.headers['authorization']?.replace('Bearer ', '');
     
-    // Store provided client ID in socket data for future reference
-    client.data.providedClientId = clientId;
+    // Store token in socket data for future reference
+    client.data.token = token;
     
-    // Check if client ID is provided and valid
-    if (!clientId) {
-      this.logger.warn(`Client connected without ID: ${client.id}`);
-      // You can choose to disconnect immediately or give a grace period
+    // Check if token is provided
+    if (!token) {
+      this.logger.warn(`Client connected without token: ${client.id}`);
+      // Give a grace period for authentication
       setTimeout(() => {
         if (!this.authenticatedClients.has(client.id)) {
           client.disconnect(true);
@@ -92,15 +92,18 @@ private connectedClients = new Set<string>();
         }
       }, 10000); // 10 seconds grace period
     } else {
-      // For demo, add the ID as valid
-      // In production, you'd validate against a pre-existing list, to be removed in prod
-      this.clientAuthService.addValidClient(clientId);
-      
-      if (this.clientAuthService.isValidClient(clientId)) {
+      try {
+        // Validate the JWT token
+        const payload = await this.clientAuthService.validateToken(token);
+        
+        // Store user info from token payload in socket data
+        client.data.user = payload;
+        
+        // Mark client as authenticated
         this.authenticatedClients.add(client.id);
-        this.logger.log(`Authenticated client connected: ${client.id}, clientId: ${clientId}`);
-      } else {
-        this.logger.warn(`Client with invalid ID rejected: ${client.id}, clientId: ${clientId}`);
+        this.logger.log(`Authenticated client connected: ${client.id}, user: ${payload.sub || payload.id || 'unknown'}`);
+      } catch (err) {
+        this.logger.warn(`Client with invalid token rejected: ${client.id}`);
         client.disconnect(true);
         return;
       }
@@ -126,23 +129,43 @@ private connectedClients = new Set<string>();
 
     // Add explicit authentication method clients can call
   @SubscribeMessage('authenticate')
-  handleAuthenticate(@MessageBody() data: { clientId: string }, @ConnectedSocket() client: Socket) {
-    if (!data || !data.clientId) {
-      return { status: 'error', message: 'Client ID is required' };
+  async handleAuthenticate(@MessageBody() data: { token: string }, @ConnectedSocket() client: Socket) {
+    if (!data || !data.token) {
+      return { status: 'error', message: 'JWT token is required' };
     }
     
-    // Store provided client ID
-    client.data.providedClientId = data.clientId;
-    
-    // Validate client ID
-    if (this.clientAuthService.isValidClient(data.clientId)) {
+    try {
+      // Store token in socket data
+      client.data.token = data.token;
+      
+      // Validate JWT token
+      const payload = await this.clientAuthService.validateToken(data.token);
+      
+      // Store user info from token payload
+      client.data.user = payload;
+      
+      // Mark client as authenticated
       this.authenticatedClients.add(client.id);
-      this.logger.log(`Client authenticated: ${client.id}, clientId: ${data.clientId}`);
-      return { status: 'success', message: 'Authentication successful' };
-    } else {
-      this.logger.warn(`Authentication failed for client: ${client.id}`);
+      this.logger.log(`Client authenticated: ${client.id}, user: ${payload.sub || payload.id || 'unknown'}`);
+      
+      return { 
+        status: 'success', 
+        message: 'Authentication successful',
+        user: { 
+          id: payload.sub || payload.id,
+          // Include other non-sensitive user info as needed
+          roles: payload.roles || [],
+          name: payload.name
+        }
+      };
+    } catch (err) {
+      this.logger.warn(`Authentication failed for client: ${client.id} - ${err.message}`);
       // Don't disconnect immediately to allow retry
-      return { status: 'error', message: 'Invalid client ID' };
+      return { 
+        status: 'error', 
+        message: 'Invalid token',
+        code: 'INVALID_TOKEN'
+      };
     }
   }
 
@@ -201,8 +224,11 @@ private connectedClients = new Set<string>();
       const enhancedPayload = {
         ...payload,
         _meta: {
-          clientId: client.data.providedClientId,
-          socketId: client.id
+          userId: client.data.user?.sub || client.data.user?.id,
+          socketId: client.id,
+          // Include additional user info that might be useful for processing
+          roles: client.data.user?.roles || [],
+          token: client.data.token // Be cautious about including the token in production
         }
       };
 
@@ -256,5 +282,19 @@ handleJoinRoom(@MessageBody() data: { room: string }, @ConnectedSocket() client:
 
     this.server.emit('incoming_event', event)
 
+  }
+  
+  /**
+   * Get the count of all connected clients
+   */
+  getConnectedClientsCount(): number {
+    return this.connectedClients.size;
+  }
+  
+  /**
+   * Get the count of authenticated clients
+   */
+  getAuthenticatedClientsCount(): number {
+    return this.authenticatedClients.size;
   }
 }

@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket with JWT Auth Test</title>
+    <script src="https://cdn.socket.io/4.4.1/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .column {
+            flex: 1;
+        }
+        #messages {
+            height: 300px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+        }
+        input, button, textarea {
+            margin-bottom: 10px;
+            padding: 8px;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+        }
+        button {
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+        }
+        button:disabled {
+            background-color: #cccccc;
+        }
+        .message {
+            padding: 5px;
+            margin-bottom: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .message.sent {
+            background-color: #f0f8ff;
+        }
+        .message.received {
+            background-color: #f0fff0;
+        }
+        .message.error {
+            background-color: #fff0f0;
+        }
+        .message .timestamp {
+            color: #999;
+            font-size: 0.8em;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket with JWT Auth Test</h1>
+    
+    <div class="container">
+        <div class="column">
+            <h2>Connection</h2>
+            <div>
+                <label for="serverUrl">Server URL:</label>
+                <input type="text" id="serverUrl" value="http://localhost:3000" style="width: 250px;">
+            </div>
+            <div>
+                <label for="token">JWT Token:</label>
+                <textarea id="token" placeholder="Enter JWT token here"></textarea>
+            </div>
+            <button id="connectBtn">Connect</button>
+            <button id="disconnectBtn" disabled>Disconnect</button>
+            <button id="authenticateBtn" disabled>Authenticate with Token</button>
+        </div>
+        
+        <div class="column">
+            <h2>Join Room</h2>
+            <div>
+                <label for="roomName">Room Name:</label>
+                <input type="text" id="roomName">
+                <button id="joinRoomBtn" disabled>Join Room</button>
+            </div>
+            
+            <h2>Send Event</h2>
+            <div>
+                <label for="eventName">Event Name:</label>
+                <input type="text" id="eventName" value="test_event">
+            </div>
+            <div>
+                <label for="eventPayload">Event Payload (JSON):</label>
+                <textarea id="eventPayload">{"message": "Hello, server!"}</textarea>
+            </div>
+            <button id="sendEventBtn" disabled>Send Event</button>
+        </div>
+    </div>
+    
+    <h2>Messages</h2>
+    <div id="messages"></div>
+    <button id="clearMessagesBtn">Clear Messages</button>
+    
+    <script>
+        let socket = null;
+        let isConnected = false;
+        let isAuthenticated = false;
+        
+        // DOM elements
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const authenticateBtn = document.getElementById('authenticateBtn');
+        const joinRoomBtn = document.getElementById('joinRoomBtn');
+        const sendEventBtn = document.getElementById('sendEventBtn');
+        const clearMessagesBtn = document.getElementById('clearMessagesBtn');
+        const messagesDiv = document.getElementById('messages');
+        
+        // Handle connect button
+        connectBtn.addEventListener('click', () => {
+            const serverUrl = document.getElementById('serverUrl').value;
+            const token = document.getElementById('token').value.trim();
+            
+            try {
+                // Cleanup any existing connection
+                if (socket) {
+                    socket.disconnect();
+                }
+                
+                // Connect to the server
+                const auth = token ? { token } : {};
+                socket = io(serverUrl, { 
+                    auth,
+                    transports: ['websocket']
+                });
+                
+                // Connection events
+                socket.on('connect', () => {
+                    isConnected = true;
+                    logMessage('Connected to server', 'system');
+                    updateButtonStates();
+                    
+                    // If token was provided in the connection, consider the client authenticated
+                    if (token) {
+                        isAuthenticated = true;
+                        logMessage('Authenticated via connection token', 'system');
+                        updateButtonStates();
+                    }
+                });
+                
+                socket.on('disconnect', () => {
+                    isConnected = false;
+                    isAuthenticated = false;
+                    logMessage('Disconnected from server', 'system');
+                    updateButtonStates();
+                });
+                
+                socket.on('connect_error', (err) => {
+                    logMessage(`Connection error: ${err.message}`, 'error');
+                    updateButtonStates();
+                });
+                
+                // Listen for incoming events
+                socket.on('outgoing_event', (data) => {
+                    logMessage(`Received event: ${JSON.stringify(data)}`, 'received');
+                });
+                
+            } catch (err) {
+                logMessage(`Error creating connection: ${err.message}`, 'error');
+            }
+        });
+        
+        // Handle disconnect button
+        disconnectBtn.addEventListener('click', () => {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+            }
+        });
+        
+        // Handle authenticate button
+        authenticateBtn.addEventListener('click', () => {
+            if (!socket || !isConnected) {
+                logMessage('Not connected to server', 'error');
+                return;
+            }
+            
+            const token = document.getElementById('token').value.trim();
+            if (!token) {
+                logMessage('No token provided', 'error');
+                return;
+            }
+            
+            socket.emit('authenticate', { token }, (response) => {
+                logMessage(`Authentication response: ${JSON.stringify(response)}`, 'received');
+                
+                if (response && response.status === 'success') {
+                    isAuthenticated = true;
+                    updateButtonStates();
+                }
+            });
+        });
+        
+        // Handle join room button
+        joinRoomBtn.addEventListener('click', () => {
+            if (!socket || !isConnected || !isAuthenticated) {
+                logMessage('Not connected or not authenticated', 'error');
+                return;
+            }
+            
+            const roomName = document.getElementById('roomName').value.trim();
+            if (!roomName) {
+                logMessage('Room name is required', 'error');
+                return;
+            }
+            
+            socket.emit('join_room', { room: roomName }, (response) => {
+                logMessage(`Join room response: ${JSON.stringify(response)}`, 'received');
+            });
+        });
+        
+        // Handle send event button
+        sendEventBtn.addEventListener('click', () => {
+            if (!socket || !isConnected || !isAuthenticated) {
+                logMessage('Not connected or not authenticated', 'error');
+                return;
+            }
+            
+            const eventName = document.getElementById('eventName').value.trim();
+            let eventPayload;
+            
+            try {
+                eventPayload = JSON.parse(document.getElementById('eventPayload').value);
+            } catch (err) {
+                logMessage('Invalid JSON payload', 'error');
+                return;
+            }
+            
+            const data = {
+                event: eventName,
+                payload: eventPayload
+            };
+            
+            logMessage(`Sending event: ${JSON.stringify(data)}`, 'sent');
+            
+            socket.emit('incoming_event', data, (response) => {
+                logMessage(`Event response: ${JSON.stringify(response)}`, 'received');
+            });
+        });
+        
+        // Handle clear messages button
+        clearMessagesBtn.addEventListener('click', () => {
+            messagesDiv.innerHTML = '';
+        });
+        
+        // Helper function to log messages
+        function logMessage(message, type) {
+            const timestamp = new Date().toLocaleTimeString();
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.innerHTML = `
+                <div class="timestamp">${timestamp}</div>
+                <div class="content">${message}</div>
+            `;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        // Update button states based on connection status
+        function updateButtonStates() {
+            connectBtn.disabled = isConnected;
+            disconnectBtn.disabled = !isConnected;
+            authenticateBtn.disabled = !isConnected || isAuthenticated;
+            joinRoomBtn.disabled = !isConnected || !isAuthenticated;
+            sendEventBtn.disabled = !isConnected || !isAuthenticated;
+        }
+    </script>
+</body>
+</html>

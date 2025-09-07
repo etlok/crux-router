@@ -1,42 +1,74 @@
 
 import { RedisService } from 'src/redis/redis.service';
-import { Logger, UseGuards, Inject, Injectable } from '@nestjs/common';
+import { Logger, UseGuards, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 
-// Add ClientAuthService for validating client IDs
+// Updated ClientAuthService for JWT validation
 @Injectable()
 export class ClientAuthService {
-  private readonly validClients = new Set<string>();
   private readonly logger = new Logger(ClientAuthService.name);
 
-  constructor(private readonly redisService: RedisService) {
-    // Load valid client IDs from Redis or other source on startup
-    this.loadValidClients();
-  }
-
-  private async loadValidClients() {
+  constructor(
+    private readonly redisService: RedisService,
+    private readonly jwtService: JwtService
+  ) {}
+  
+  /**
+   * Validate a JWT token
+   * @param token The JWT token to validate
+   * @returns The decoded token payload if valid
+   * @throws UnauthorizedException if token is invalid
+   */
+  async validateToken(token: string): Promise<any> {
     try {
-      // Example: Load from Redis
-      const clientsStr = await this.redisService.get('valid_client_ids');
-      if (clientsStr) {
-        const clients = JSON.parse(clientsStr);
-        clients.forEach(id => this.validClients.add(id));
+      // Verify the JWT token
+      const payload = this.jwtService.verify(token);
+      
+      // Optional: Check if the token has been revoked in Redis
+      const isRevoked = await this.redisService.get(`revoked_token:${token}`);
+      if (isRevoked) {
+        this.logger.warn(`Attempt to use revoked token: ${token}`);
+        throw new UnauthorizedException('Token has been revoked');
       }
-      this.logger.log(`Loaded ${this.validClients.size} valid client IDs`);
+      
+      return payload;
     } catch (error) {
-      this.logger.error(`Failed to load valid clients: ${error.message}`);
+      this.logger.error(`JWT validation error: ${error.message}`);
+      throw new UnauthorizedException('Invalid token');
     }
   }
-
-  isValidClient(clientId: string): boolean {
-    // In production, this might check against a database or auth service
-    return this.validClients.has(clientId);
+  
+  /**
+   * Generate a new JWT token
+   * @param payload The payload to include in the token
+   * @returns The generated token
+   */
+  generateToken(payload: any): string {
+    return this.jwtService.sign(payload);
   }
-
-  // For demo purposes, add a client ID
-  addValidClient(clientId: string) {
-    this.validClients.add(clientId);
-    this.logger.log(`Added valid client ID: ${clientId}`);
-    // Persist to Redis in real implementation
+  
+  /**
+   * Revoke a token by adding it to the revoked tokens list in Redis
+   * @param token The token to revoke
+   * @param expiry Optional expiry time (defaults to token expiry)
+   */
+  async revokeToken(token: string, expiry?: number): Promise<void> {
+    try {
+      const decoded = this.jwtService.decode(token);
+      // If token has exp claim, use it for Redis expiry (with some buffer)
+      const expiryTime = expiry || (decoded && decoded['exp'] 
+        ? decoded['exp'] - Math.floor(Date.now() / 1000) + 10 
+        : 3600);
+      
+      await this.redisService.set(
+        `revoked_token:${token}`, 
+        'true', 
+        expiryTime
+      );
+      this.logger.log(`Token revoked: ${token.substring(0, 10)}...`);
+    } catch (error) {
+      this.logger.error(`Failed to revoke token: ${error.message}`);
+    }
   }
 }
 
