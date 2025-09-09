@@ -30,6 +30,16 @@ class BroadcastDto {
     room;
     clientId;
 }
+class InitializeDto {
+    auth;
+    event;
+    payload;
+}
+class ChannelBroadcastDto {
+    event;
+    channel_ids;
+    payload;
+}
 class TokenValidationDto {
     token;
 }
@@ -217,6 +227,107 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
         }
         return (0, uuid_1.v4)();
     }
+    async initialize(initializeDto) {
+        try {
+            this.logger.log(`Initialize request received: ${JSON.stringify(initializeDto)}`);
+            if (initializeDto.event !== 'initialize') {
+                throw new common_1.BadRequestException('Event must be "initialize"');
+            }
+            if (!initializeDto.payload || !Array.isArray(initializeDto.payload.channels)) {
+                throw new common_1.BadRequestException('Invalid payload format. Channels array is required.');
+            }
+            let authenticatedUserId = null;
+            if (initializeDto.auth && Object.keys(initializeDto.auth).length > 0) {
+                if (initializeDto.auth.token) {
+                    try {
+                        const payload = await this.clientAuthService.validateToken(initializeDto.auth.token);
+                        authenticatedUserId = payload.sub || payload.id;
+                        this.logger.log(`Authenticated user: ${authenticatedUserId}`);
+                    }
+                    catch (error) {
+                        this.logger.warn(`Authentication failed: ${error.message}`);
+                    }
+                }
+            }
+            const channelResults = await Promise.all(initializeDto.payload.channels.map(async (channelId) => {
+                const channelKey = `channel:${channelId}`;
+                const channelExists = await this.redisService.exists(channelKey);
+                if (!channelExists) {
+                    await this.redisService.set(channelKey, JSON.stringify({
+                        id: channelId,
+                        created: new Date().toISOString(),
+                        active: true,
+                        creator: authenticatedUserId || 'anonymous'
+                    }));
+                    this.logger.log(`Created new channel: ${channelId}`);
+                    return { channelId, status: 'created' };
+                }
+                else {
+                    this.logger.log(`Channel already exists: ${channelId}`);
+                    return { channelId, status: 'exists' };
+                }
+            }));
+            this.wsGateway.joinClientsToChannels(initializeDto.payload.channels);
+            return {
+                status: 'success',
+                message: 'Channels initialized successfully',
+                channels: channelResults,
+                authenticated: !!authenticatedUserId,
+                sessionId: (0, uuid_1.v4)()
+            };
+        }
+        catch (error) {
+            this.logger.error(`Channel initialization failed: ${error.message}`);
+            throw error;
+        }
+    }
+    async channelBroadcast(broadcastDto) {
+        try {
+            this.logger.log(`Broadcast request received: ${JSON.stringify(broadcastDto)}`);
+            if (broadcastDto.event !== 'broadcast') {
+                throw new common_1.BadRequestException('Event must be "broadcast"');
+            }
+            if (!broadcastDto.channel_ids || !Array.isArray(broadcastDto.channel_ids) || broadcastDto.channel_ids.length === 0) {
+                throw new common_1.BadRequestException('Invalid request. At least one channel_id is required.');
+            }
+            if (!broadcastDto.payload) {
+                throw new common_1.BadRequestException('Payload is required');
+            }
+            for (const channelId of broadcastDto.channel_ids) {
+                const channelExists = await this.redisService.exists(`channel:${channelId}`);
+                if (!channelExists) {
+                    this.logger.warn(`Channel ${channelId} does not exist, but will attempt to broadcast anyway`);
+                }
+            }
+            const messageData = {
+                event: 'message',
+                data: {
+                    ...broadcastDto.payload,
+                    _meta: {
+                        timestamp: new Date().toISOString(),
+                        source: 'api-broadcast',
+                        messageId: (0, uuid_1.v4)()
+                    }
+                }
+            };
+            const results = broadcastDto.channel_ids.map(channelId => {
+                this.wsGateway.server.to(channelId).emit('outgoing_event', messageData);
+                this.redisService.publish(`channel:${channelId}`, JSON.stringify(messageData));
+                this.logger.log(`Broadcast sent to channel: ${channelId}`);
+                return { channelId, status: 'broadcast_sent' };
+            });
+            return {
+                status: 'success',
+                message: 'Broadcast sent successfully',
+                channels: results,
+                messageId: messageData.data._meta.messageId
+            };
+        }
+        catch (error) {
+            this.logger.error(`Channel broadcast failed: ${error.message}`);
+            throw error;
+        }
+    }
 };
 exports.WebSocketController = WebSocketController;
 __decorate([
@@ -260,6 +371,20 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", void 0)
 ], WebSocketController.prototype, "generateTestToken", null);
+__decorate([
+    (0, common_1.Post)('initialize'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [InitializeDto]),
+    __metadata("design:returntype", Promise)
+], WebSocketController.prototype, "initialize", null);
+__decorate([
+    (0, common_1.Post)('broadcast'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [ChannelBroadcastDto]),
+    __metadata("design:returntype", Promise)
+], WebSocketController.prototype, "channelBroadcast", null);
 exports.WebSocketController = WebSocketController = WebSocketController_1 = __decorate([
     (0, common_1.Controller)('websocket'),
     __metadata("design:paramtypes", [websocket_gateway_1.WSGateway,

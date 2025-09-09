@@ -77,6 +77,10 @@ export declare class WSGateway implements OnGatewayInit, OnGatewayConnection, On
         status: string;
         room: string;
     };
+    joinClientsToChannels(channels: string[], clientIds?: string[]): {
+        status: string;
+        message: string;
+    };
     handleIncomingEvent(event: any): void;
     getConnectedClientsCount(): number;
     getAuthenticatedClientsCount(): number;

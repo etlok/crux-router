@@ -12,6 +12,18 @@ declare class BroadcastDto {
     room?: string;
     clientId?: string;
 }
+declare class InitializeDto {
+    auth: Record<string, any>;
+    event: string;
+    payload: {
+        channels: string[];
+    };
+}
+declare class ChannelBroadcastDto {
+    event: string;
+    channel_ids: string[];
+    payload: Record<string, any>;
+}
 declare class TokenValidationDto {
     token: string;
 }
@@ -64,5 +76,24 @@ export declare class WebSocketController {
     };
     private validateUserCredentials;
     private getUserId;
+    initialize(initializeDto: InitializeDto): Promise<{
+        status: string;
+        message: string;
+        channels: {
+            channelId: string;
+            status: string;
+        }[];
+        authenticated: boolean;
+        sessionId: string;
+    }>;
+    channelBroadcast(broadcastDto: ChannelBroadcastDto): Promise<{
+        status: string;
+        message: string;
+        channels: {
+            channelId: string;
+            status: string;
+        }[];
+        messageId: string;
+    }>;
 }
 export {};

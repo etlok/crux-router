@@ -208,7 +208,33 @@ let WSGateway = WSGateway_1 = class WSGateway {
     }
     handleJoinRoom(data, client) {
         client.join(data.room);
+        this.logger.log(`Client ${client.id} joined room: ${data.room}`);
         return { status: 'ok', room: data.room };
+    }
+    joinClientsToChannels(channels, clientIds) {
+        if (!channels || channels.length === 0) {
+            return { status: 'error', message: 'No channels specified' };
+        }
+        if (clientIds && clientIds.length > 0) {
+            clientIds.forEach(clientId => {
+                channels.forEach(channel => {
+                    this.server.in(clientId).socketsJoin(channel);
+                });
+                this.logger.log(`Joined client ${clientId} to channels: ${channels.join(', ')}`);
+            });
+        }
+        else {
+            channels.forEach(channel => {
+                this.server.sockets.socketsJoin(channel);
+            });
+            this.logger.log(`Joined all clients to channels: ${channels.join(', ')}`);
+        }
+        return {
+            status: 'success',
+            message: clientIds ?
+                `Joined ${clientIds.length} clients to ${channels.length} channels` :
+                `Joined all clients to ${channels.length} channels`
+        };
     }
     handleIncomingEvent(event) {
         this.logger.log(`incoming event: ${JSON.stringify(event)}`);

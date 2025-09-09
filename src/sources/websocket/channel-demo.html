@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Channel-based WebSocket Demo</title>
+    <script src="https://cdn.socket.io/4.4.1/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .column {
+            flex: 1;
+        }
+        .panel {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        h2 {
+            margin-top: 0;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        #messages {
+            height: 300px;
+            border: 1px solid #ccc;
+            padding: 10px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+        }
+        input, button, textarea, select {
+            margin-bottom: 10px;
+            padding: 8px;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+        }
+        button {
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            margin-right: 5px;
+        }
+        button:disabled {
+            background-color: #cccccc;
+        }
+        .message {
+            padding: 5px;
+            margin-bottom: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .message.sent {
+            background-color: #f0f8ff;
+        }
+        .message.received {
+            background-color: #f0fff0;
+        }
+        .message.error {
+            background-color: #fff0f0;
+        }
+        .message .timestamp {
+            color: #999;
+            font-size: 0.8em;
+        }
+        .channel-box {
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .channel-name {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Channel-based WebSocket Demo</h1>
+    
+    <div class="container">
+        <!-- API Column -->
+        <div class="column">
+            <div class="panel">
+                <h2>1. Initialize Channels</h2>
+                <div class="form-group">
+                    <label for="apiUrl">API Base URL:</label>
+                    <input type="text" id="apiUrl" value="http://localhost:3000" style="width: 80%;">
+                </div>
+                
+                <div class="form-group">
+                    <label for="channelsList">Channels (comma-separated):</label>
+                    <input type="text" id="channelsList" value="channel1,channel2" style="width: 80%;">
+                </div>
+                
+                <div class="form-group">
+                    <label for="authToken">Authentication Token (optional):</label>
+                    <input type="text" id="authToken" style="width: 80%;">
+                </div>
+                
+                <button id="initializeBtn">Initialize Channels</button>
+            </div>
+            
+            <div class="panel">
+                <h2>2. Broadcast to Channels</h2>
+                <div class="form-group">
+                    <label for="broadcastChannels">Target Channels (comma-separated):</label>
+                    <input type="text" id="broadcastChannels" value="channel1" style="width: 80%;">
+                </div>
+                
+                <div class="form-group">
+                    <label for="broadcastMessage">Message:</label>
+                    <textarea id="broadcastMessage">{"message": "Hello from the server!"}</textarea>
+                </div>
+                
+                <button id="broadcastBtn">Broadcast Message</button>
+            </div>
+        </div>
+        
+        <!-- WebSocket Column -->
+        <div class="column">
+            <div class="panel">
+                <h2>3. WebSocket Connection</h2>
+                <div class="form-group">
+                    <label for="wsUrl">WebSocket URL:</label>
+                    <input type="text" id="wsUrl" value="http://localhost:3000" style="width: 80%;">
+                </div>
+                
+                <button id="connectBtn">Connect</button>
+                <button id="disconnectBtn" disabled>Disconnect</button>
+            </div>
+            
+            <div class="panel">
+                <h2>4. Channels</h2>
+                <div id="channelsContainer">
+                    <!-- Channels will be added here -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <h2>Activity Log</h2>
+    <div id="messages"></div>
+    <button id="clearMessagesBtn">Clear Log</button>
+    
+    <script>
+        // DOM elements
+        const apiUrl = document.getElementById('apiUrl');
+        const wsUrl = document.getElementById('wsUrl');
+        const channelsList = document.getElementById('channelsList');
+        const authToken = document.getElementById('authToken');
+        const broadcastChannels = document.getElementById('broadcastChannels');
+        const broadcastMessage = document.getElementById('broadcastMessage');
+        const initializeBtn = document.getElementById('initializeBtn');
+        const broadcastBtn = document.getElementById('broadcastBtn');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const messagesDiv = document.getElementById('messages');
+        const channelsContainer = document.getElementById('channelsContainer');
+        const clearMessagesBtn = document.getElementById('clearMessagesBtn');
+        
+        // Global variables
+        let socket = null;
+        let isConnected = false;
+        let activeChannels = new Set();
+        
+        // Event handlers
+        initializeBtn.addEventListener('click', async () => {
+            try {
+                const channels = channelsList.value.split(',').map(c => c.trim()).filter(Boolean);
+                
+                if (!channels.length) {
+                    logMessage('Please enter at least one channel name', 'error');
+                    return;
+                }
+                
+                const payload = {
+                    event: 'initialize',
+                    auth: {},
+                    payload: {
+                        channels
+                    }
+                };
+                
+                // Add auth token if provided
+                if (authToken.value.trim()) {
+                    payload.auth.token = authToken.value.trim();
+                }
+                
+                logMessage(`Initializing channels: ${channels.join(', ')}`, 'sent');
+                
+                const response = await axios.post(`${apiUrl.value}/websocket/initialize`, payload);
+                
+                logMessage(`Initialize response: ${JSON.stringify(response.data)}`, 'received');
+                
+                // Update broadcast channels input
+                broadcastChannels.value = channels.join(',');
+                
+                // Update the channels list in UI
+                updateChannelsUI(channels);
+            } catch (err) {
+                logMessage(`Initialization error: ${err.response?.data?.message || err.message}`, 'error');
+            }
+        });
+        
+        broadcastBtn.addEventListener('click', async () => {
+            try {
+                const channels = broadcastChannels.value.split(',').map(c => c.trim()).filter(Boolean);
+                
+                if (!channels.length) {
+                    logMessage('Please enter at least one channel for broadcasting', 'error');
+                    return;
+                }
+                
+                let messageData;
+                try {
+                    messageData = JSON.parse(broadcastMessage.value);
+                } catch (err) {
+                    logMessage('Invalid JSON in message field', 'error');
+                    return;
+                }
+                
+                const payload = {
+                    event: 'broadcast',
+                    channel_ids: channels,
+                    payload: messageData
+                };
+                
+                logMessage(`Broadcasting to channels: ${channels.join(', ')}`, 'sent');
+                
+                const response = await axios.post(`${apiUrl.value}/websocket/broadcast`, payload);
+                
+                logMessage(`Broadcast response: ${JSON.stringify(response.data)}`, 'received');
+            } catch (err) {
+                logMessage(`Broadcast error: ${err.response?.data?.message || err.message}`, 'error');
+            }
+        });
+        
+        connectBtn.addEventListener('click', () => {
+            try {
+                // Cleanup any existing connection
+                if (socket) {
+                    socket.disconnect();
+                }
+                
+                logMessage('Connecting to WebSocket server...', 'system');
+                
+                // Connect to the server
+                socket = io(wsUrl.value, {
+                    transports: ['websocket']
+                });
+                
+                // Connection events
+                socket.on('connect', () => {
+                    isConnected = true;
+                    logMessage(`Connected to WebSocket server. Socket ID: ${socket.id}`, 'system');
+                    updateButtonStates();
+                    
+                    // Join any active channels
+                    if (activeChannels.size > 0) {
+                        const channelsArray = Array.from(activeChannels);
+                        logMessage(`Joining channels: ${channelsArray.join(', ')}`, 'system');
+                        
+                        channelsArray.forEach(channel => {
+                            socket.emit('join_room', { room: channel }, (response) => {
+                                logMessage(`Joined channel ${channel}: ${JSON.stringify(response)}`, 'received');
+                            });
+                        });
+                    }
+                });
+                
+                socket.on('disconnect', () => {
+                    isConnected = false;
+                    logMessage('Disconnected from WebSocket server', 'system');
+                    updateButtonStates();
+                });
+                
+                socket.on('connect_error', (err) => {
+                    logMessage(`Connection error: ${err.message}`, 'error');
+                    updateButtonStates();
+                });
+                
+                // Listen for incoming events
+                socket.on('outgoing_event', (data) => {
+                    logMessage(`Received message: ${JSON.stringify(data)}`, 'received');
+                });
+                
+            } catch (err) {
+                logMessage(`Error creating connection: ${err.message}`, 'error');
+            }
+        });
+        
+        disconnectBtn.addEventListener('click', () => {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+            }
+        });
+        
+        clearMessagesBtn.addEventListener('click', () => {
+            messagesDiv.innerHTML = '';
+        });
+        
+        // Helper functions
+        function logMessage(message, type) {
+            const timestamp = new Date().toLocaleTimeString();
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type || 'system'}`;
+            
+            // Format message if it's JSON
+            let formattedMessage = message;
+            if (typeof message === 'string' && 
+                (message.startsWith('{') || message.startsWith('['))) {
+                try {
+                    const jsonObj = JSON.parse(message);
+                    formattedMessage = JSON.stringify(jsonObj, null, 2);
+                } catch (e) {
+                    // Not valid JSON, keep as is
+                }
+            }
+            
+            messageDiv.innerHTML = `
+                <div class="timestamp">${timestamp} - ${type || 'system'}</div>
+                <div class="content">${formattedMessage}</div>
+            `;
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        function updateButtonStates() {
+            connectBtn.disabled = isConnected;
+            disconnectBtn.disabled = !isConnected;
+        }
+        
+        function updateChannelsUI(channels) {
+            // Update active channels set
+            activeChannels = new Set(channels);
+            
+            // Clear existing channels
+            channelsContainer.innerHTML = '';
+            
+            // Create channel elements
+            channels.forEach(channel => {
+                const channelBox = document.createElement('div');
+                channelBox.className = 'channel-box';
+                channelBox.innerHTML = `
+                    <div class="channel-name">${channel}</div>
+                    <div>Status: ${isConnected ? 'Connected' : 'Not connected'}</div>
+                    <button class="join-channel-btn" data-channel="${channel}">Join Channel</button>
+                `;
+                
+                // Add event listener to join button
+                const joinBtn = channelBox.querySelector('.join-channel-btn');
+                joinBtn.addEventListener('click', () => {
+                    if (isConnected && socket) {
+                        socket.emit('join_room', { room: channel }, (response) => {
+                            logMessage(`Manually joined channel ${channel}: ${JSON.stringify(response)}`, 'received');
+                        });
+                    } else {
+                        logMessage('Connect to WebSocket server first', 'error');
+                    }
+                });
+                
+                channelsContainer.appendChild(channelBox);
+            });
+        }
+    </script>
+</body>
+</html>

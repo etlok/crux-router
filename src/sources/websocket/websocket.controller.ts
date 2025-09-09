@@ -18,6 +18,20 @@ class BroadcastDto {
   clientId?: string;
 }
 
+class InitializeDto {
+  auth: Record<string, any>;
+  event: string;
+  payload: {
+    channels: string[];
+  };
+}
+
+class ChannelBroadcastDto {
+  event: string;
+  channel_ids: string[];
+  payload: Record<string, any>;
+}
+
 class TokenValidationDto {
   token: string;
 }
@@ -295,5 +309,169 @@ export class WebSocketController {
     
     // Fallback to generating a new ID
     return uuidv4();
+  }
+
+  /**
+   * Initialize endpoint that authenticates and creates channels
+   * 
+   * Example payload:
+   * {
+   *   "auth": {},
+   *   "event": "initialize",
+   *   "payload": {
+   *     "channels": ["channel1", "channel2"]
+   *   }
+   * }
+   */
+  @Post('initialize')
+  async initialize(@Body() initializeDto: InitializeDto) {
+    try {
+      this.logger.log(`Initialize request received: ${JSON.stringify(initializeDto)}`);
+      
+      // 1. Validate request format
+      if (initializeDto.event !== 'initialize') {
+        throw new BadRequestException('Event must be "initialize"');
+      }
+      
+      if (!initializeDto.payload || !Array.isArray(initializeDto.payload.channels)) {
+        throw new BadRequestException('Invalid payload format. Channels array is required.');
+      }
+      
+      // 2. Authentication logic
+      let authenticatedUserId = null;
+      
+      // If auth info is provided, validate it
+      if (initializeDto.auth && Object.keys(initializeDto.auth).length > 0) {
+        // For JWT token in auth.token
+        if (initializeDto.auth.token) {
+          try {
+            const payload = await this.clientAuthService.validateToken(initializeDto.auth.token);
+            authenticatedUserId = payload.sub || payload.id;
+            this.logger.log(`Authenticated user: ${authenticatedUserId}`);
+          } catch (error) {
+            this.logger.warn(`Authentication failed: ${error.message}`);
+            // Continue without authentication
+          }
+        } 
+        // Add other auth methods as needed
+      }
+      
+      // 3. Create or ensure channels exist
+      const channelResults = await Promise.all(
+        initializeDto.payload.channels.map(async (channelId) => {
+          // Store channel info in Redis for persistence
+          const channelKey = `channel:${channelId}`;
+          const channelExists = await this.redisService.exists(channelKey);
+          
+          if (!channelExists) {
+            // Create new channel
+            await this.redisService.set(
+              channelKey, 
+              JSON.stringify({
+                id: channelId,
+                created: new Date().toISOString(),
+                active: true,
+                creator: authenticatedUserId || 'anonymous'
+              })
+            );
+            
+            this.logger.log(`Created new channel: ${channelId}`);
+            return { channelId, status: 'created' };
+          } else {
+            this.logger.log(`Channel already exists: ${channelId}`);
+            return { channelId, status: 'exists' };
+          }
+        })
+      );
+      
+      // 4. Subscribe all connected clients to these channels
+      this.wsGateway.joinClientsToChannels(initializeDto.payload.channels);
+      
+      return {
+        status: 'success',
+        message: 'Channels initialized successfully',
+        channels: channelResults,
+        authenticated: !!authenticatedUserId,
+        sessionId: uuidv4() // Optional: provide a session ID for future reference
+      };
+    } catch (error) {
+      this.logger.error(`Channel initialization failed: ${error.message}`);
+      throw error;
+    }
+  }
+  
+  /**
+   * Broadcast endpoint for sending messages to specific channels without authentication
+   * 
+   * Example payload:
+   * {
+   *   "event": "broadcast",
+   *   "channel_ids": ["channel1"],
+   *   "payload": {
+   *     "message": "Hello from the server!"
+   *   }
+   * }
+   */
+  @Post('broadcast')
+  async channelBroadcast(@Body() broadcastDto: ChannelBroadcastDto) {
+    try {
+      this.logger.log(`Broadcast request received: ${JSON.stringify(broadcastDto)}`);
+      
+      // 1. Validate request format
+      if (broadcastDto.event !== 'broadcast') {
+        throw new BadRequestException('Event must be "broadcast"');
+      }
+      
+      if (!broadcastDto.channel_ids || !Array.isArray(broadcastDto.channel_ids) || broadcastDto.channel_ids.length === 0) {
+        throw new BadRequestException('Invalid request. At least one channel_id is required.');
+      }
+      
+      if (!broadcastDto.payload) {
+        throw new BadRequestException('Payload is required');
+      }
+      
+      // 2. Check if channels exist
+      for (const channelId of broadcastDto.channel_ids) {
+        const channelExists = await this.redisService.exists(`channel:${channelId}`);
+        if (!channelExists) {
+          this.logger.warn(`Channel ${channelId} does not exist, but will attempt to broadcast anyway`);
+        }
+      }
+      
+      // 3. Prepare broadcast message with metadata
+      const messageData = {
+        event: 'message',
+        data: {
+          ...broadcastDto.payload,
+          _meta: {
+            timestamp: new Date().toISOString(),
+            source: 'api-broadcast',
+            messageId: uuidv4()
+          }
+        }
+      };
+      
+      // 4. Broadcast to each specified channel
+      const results = broadcastDto.channel_ids.map(channelId => {
+        // Broadcast to the channel (room in Socket.IO terminology)
+        this.wsGateway.server.to(channelId).emit('outgoing_event', messageData);
+        
+        // Also publish to Redis for other potential consumers
+        this.redisService.publish(`channel:${channelId}`, JSON.stringify(messageData));
+        
+        this.logger.log(`Broadcast sent to channel: ${channelId}`);
+        return { channelId, status: 'broadcast_sent' };
+      });
+      
+      return {
+        status: 'success',
+        message: 'Broadcast sent successfully',
+        channels: results,
+        messageId: messageData.data._meta.messageId
+      };
+    } catch (error) {
+      this.logger.error(`Channel broadcast failed: ${error.message}`);
+      throw error;
+    }
   }
 }
