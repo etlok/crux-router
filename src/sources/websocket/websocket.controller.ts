@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, UnauthorizedException, BadRequestException, Query, Logger } from '@nestjs/common';
+import { Controller, Post, Body, Get, UnauthorizedException, BadRequestException, Query, Logger, Req } from '@nestjs/common';
 import { WSGateway } from './websocket.gateway';
 import { ClientAuthService } from './client-auth.service';
 import { JwtService } from '@nestjs/jwt';
@@ -151,6 +151,40 @@ export class WebSocketController {
       };
     } catch (error) {
       this.logger.error(`Token revocation failed: ${error.message}`);
+      throw error;
+    }
+  }
+  
+  /**
+   * Returns a sample JWT token for testing
+   */
+  @Get('sample-token')
+  getSampleToken() {
+    try {
+      const tokenInfo = this.clientAuthService.getSampleTestTokenWithInfo();
+      
+      return {
+        status: 'success',
+        token: tokenInfo.token,
+        payload: tokenInfo.payload,
+        usage: {
+          headers: {
+            'Authorization': `Bearer ${tokenInfo.token}`
+          },
+          websocket_payload: {
+            auth: {
+              token: tokenInfo.token
+            },
+            event: "initialize",
+            payload: {
+              channels: ["channel1", "channel2"]
+            }
+          },
+          curl: `curl -X POST http://localhost:3000/websocket/initialize -H "Content-Type: application/json" -d '{"auth":{"token":"${tokenInfo.token}"},"event":"initialize","payload":{"channels":["channel1"]}}'`
+        }
+      };
+    } catch (error) {
+      this.logger.error(`Sample token generation failed: ${error.message}`);
       throw error;
     }
   }
@@ -311,20 +345,9 @@ export class WebSocketController {
     return uuidv4();
   }
 
-  /**
-   * Initialize endpoint that authenticates and creates channels
-   * 
-   * Example payload:
-   * {
-   *   "auth": {},
-   *   "event": "initialize",
-   *   "payload": {
-   *     "channels": ["channel1", "channel2"]
-   *   }
-   * }
-   */
+ 
   @Post('initialize')
-  async initialize(@Body() initializeDto: InitializeDto) {
+  async initialize(@Body() initializeDto: InitializeDto, @Req() req: any) {
     try {
       this.logger.log(`Initialize request received: ${JSON.stringify(initializeDto)}`);
       
@@ -337,26 +360,25 @@ export class WebSocketController {
         throw new BadRequestException('Invalid payload format. Channels array is required.');
       }
       
-      // 2. Authentication logic
+      // 2. Authentication logic - Use the user set by the AuthMiddleware
       let authenticatedUserId = null;
       
-      // If auth info is provided, validate it
-      if (initializeDto.auth && Object.keys(initializeDto.auth).length > 0) {
-        // For JWT token in auth.token
-        if (initializeDto.auth.token) {
-          try {
-            const payload = await this.clientAuthService.validateToken(initializeDto.auth.token);
-            authenticatedUserId = payload.sub || payload.id;
-            this.logger.log(`Authenticated user: ${authenticatedUserId}`);
-          } catch (error) {
-            this.logger.warn(`Authentication failed: ${error.message}`);
-            // Continue without authentication
-          }
-        } 
-        // Add other auth methods as needed
+      // Check if user was authenticated by middleware
+      if (req.isAuthenticated && req.user) {
+        authenticatedUserId = req.user.sub || req.user.id;
+        this.logger.log(`User authenticated by middleware: ${authenticatedUserId}`);
+      } 
+      // Fallback to manual token validation if middleware didn't authenticate
+      else if (initializeDto.auth && initializeDto.auth.token) {
+        try {
+          const payload = await this.clientAuthService.validateToken(initializeDto.auth.token);
+          authenticatedUserId = payload.sub || payload.id;
+          this.logger.log(`User authenticated manually: ${authenticatedUserId}`);
+        } catch (error) {
+          this.logger.warn(`Authentication failed: ${error.message}`);
+        }
       }
       
-      // 3. Create or ensure channels exist
       const channelResults = await Promise.all(
         initializeDto.payload.channels.map(async (channelId) => {
           // Store channel info in Redis for persistence
@@ -392,28 +414,16 @@ export class WebSocketController {
         message: 'Channels initialized successfully',
         channels: channelResults,
         authenticated: !!authenticatedUserId,
-        sessionId: uuidv4() // Optional: provide a session ID for future reference
+        sessionId: uuidv4() 
       };
     } catch (error) {
       this.logger.error(`Channel initialization failed: ${error.message}`);
       throw error;
     }
   }
-  
-  /**
-   * Broadcast endpoint for sending messages to specific channels without authentication
-   * 
-   * Example payload:
-   * {
-   *   "event": "broadcast",
-   *   "channel_ids": ["channel1"],
-   *   "payload": {
-   *     "message": "Hello from the server!"
-   *   }
-   * }
-   */
+
   @Post('broadcast')
-  async channelBroadcast(@Body() broadcastDto: ChannelBroadcastDto) {
+  async channelBroadcast(@Body() broadcastDto: ChannelBroadcastDto, @Req() req: any) {
     try {
       this.logger.log(`Broadcast request received: ${JSON.stringify(broadcastDto)}`);
       
@@ -430,7 +440,13 @@ export class WebSocketController {
         throw new BadRequestException('Payload is required');
       }
       
-      // 2. Check if channels exist
+      // Add user info to the message if authenticated by middleware
+      if (req.isAuthenticated && req.user) {
+        this.logger.log(`Broadcast from authenticated user: ${req.user.sub || req.user.id}`);
+        // You could add user info to metadata or restrict broadcasting based on permissions
+      }
+      
+console.log(broadcastDto);
       for (const channelId of broadcastDto.channel_ids) {
         const channelExists = await this.redisService.exists(`channel:${channelId}`);
         if (!channelExists) {
@@ -438,7 +454,6 @@ export class WebSocketController {
         }
       }
       
-      // 3. Prepare broadcast message with metadata
       const messageData = {
         event: 'message',
         data: {
@@ -453,10 +468,8 @@ export class WebSocketController {
       
       // 4. Broadcast to each specified channel
       const results = broadcastDto.channel_ids.map(channelId => {
-        // Broadcast to the channel (room in Socket.IO terminology)
         this.wsGateway.server.to(channelId).emit('outgoing_event', messageData);
         
-        // Also publish to Redis for other potential consumers
         this.redisService.publish(`channel:${channelId}`, JSON.stringify(messageData));
         
         this.logger.log(`Broadcast sent to channel: ${channelId}`);

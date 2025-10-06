@@ -12,6 +12,9 @@ import { WebsocketModule } from './sources/websocket/websocket.module';
 import { RouterService } from './router/router.service';
 import { ClientAuthService } from './sources/websocket/client-auth.service';
 import { JwtModule } from './auth/jwt.module';
+import { MiddlewareModule } from './middleware/middleware.module';
+import { FileParserModule } from './file-parser/file-parser.module';
+import { EventsModule } from './events/events.module';
 
 @Module({
   imports: [
@@ -23,6 +26,9 @@ import { JwtModule } from './auth/jwt.module';
       load: [redisConfig, jwtConfig],
     }),
     JwtModule,
+    MiddlewareModule,
+    FileParserModule,
+    EventsModule,
     KafkaModule.register()
   ],
     controllers: [ApiController],

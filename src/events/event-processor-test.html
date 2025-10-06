@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Event Processor Test</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #connection-status {
+            padding: 8px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .pending {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        #events-container, #auth-container {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0069d9;
+        }
+        textarea {
+            width: 100%;
+            min-height: 120px;
+            margin-bottom: 10px;
+            font-family: monospace;
+        }
+        .log-filters {
+            margin-bottom: 10px;
+            display: flex;
+            gap: 15px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+        }
+        .log-filters label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        #log-container {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            height: 300px;
+            overflow-y: auto;
+            padding: 10px;
+            background-color: #f8f9fa;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .log-entry.outgoing {
+            background-color: #e7f3ff;
+        }
+        .log-entry.incoming {
+            background-color: #f1f8e9;
+        }
+        .log-entry.error {
+            background-color: #ffebee;
+        }
+        .log-entry.step-added {
+            background-color: #e8f5e9;
+            font-weight: bold;
+            border-left: 3px solid #4caf50;
+        }
+        .log-entry.step-instance {
+            background-color: #e3f2fd;
+            font-weight: bold;
+            border-left: 3px solid #2196f3;
+        }
+        .log-entry.worker-selected {
+            background-color: #fff8e1;
+            font-weight: bold;
+            border-left: 3px solid #ffc107;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Event Processor Test</h1>
+    <div id="connection-status" class="pending">Connecting...</div>
+    
+    <div id="auth-container">
+        <h2>Authentication</h2>
+        <div>
+            <label for="token-input">JWT Token:</label>
+            <input type="text" id="token-input" placeholder="Paste JWT token here" style="width: 100%; margin-bottom: 10px;">
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <button id="authenticate-btn">Authenticate</button>
+                <button id="get-token-btn">Get Valid Token</button>
+                <button id="test-connection-btn">Test Connection</button>
+            </div>
+            <div class="connection-info" style="background-color: #f0f0f0; padding: 10px; border-radius: 4px; font-size: 0.9em;">
+                <div><strong>Socket ID:</strong> <span id="socket-id">Not connected</span></div>
+                <div><strong>Connection State:</strong> <span id="connection-state">Unknown</span></div>
+                <div><strong>Auth State:</strong> <span id="auth-state">Not authenticated</span></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="events-container">
+        <h2>Event Processor</h2>
+        <div>
+            <label for="event-data">Event Configuration (JSON):</label>
+            <textarea id="event-data">{
+  "event": "create_entity_websocket",
+  "config": {},
+  "middleware": ["authentication"],
+  "actions": [
+    {
+      "type": "execute_workflow",
+      "workflow": "create_entity",
+      "config": {  
+        "resulting_event": "entity_created",
+        "relationship_type": "CREATOR"
+      }
+    }
+  ]
+}</textarea>
+            <div class="sample-templates" style="margin-top: 10px;">
+              <button id="load-create-entity">Load Create Entity Example</button>
+              <button id="load-update-entity">Load Update Entity Example</button>
+              <button id="load-delete-entity">Load Delete Entity Example</button>
+            </div>
+            <button id="send-event-btn">Send Event</button>
+        </div>
+    </div>
+    
+    <div>
+        <h2>Event Log</h2>
+        <div class="log-filters">
+            <label><input type="checkbox" id="filter-steps" checked> Show Step Events</label>
+            <label><input type="checkbox" id="filter-instances" checked> Show Instance Events</label>
+            <label><input type="checkbox" id="filter-workers" checked> Show Worker Selection</label>
+            <button id="clear-logs">Clear Logs</button>
+        </div>
+        <div id="log-container"></div>
+    </div>
+    
+    <script>
+        // Configure Socket.io with reconnection options
+        const socket = io('http://localhost:3000', {
+            reconnection: true,
+            reconnectionAttempts: 10,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            timeout: 20000
+        });
+        const connectionStatus = document.getElementById('connection-status');
+        const tokenInput = document.getElementById('token-input');
+        const authenticateBtn = document.getElementById('authenticate-btn');
+        const getTokenBtn = document.getElementById('get-token-btn');
+        const testConnectionBtn = document.getElementById('test-connection-btn');
+        const socketIdEl = document.getElementById('socket-id');
+        const connectionStateEl = document.getElementById('connection-state');
+        const authStateEl = document.getElementById('auth-state');
+        const eventDataTextarea = document.getElementById('event-data');
+        const sendEventBtn = document.getElementById('send-event-btn');
+        const logContainer = document.getElementById('log-container');
+        
+        // Track authentication state
+        let isAuthenticated = true;
+        
+        // Connection status management
+        socket.on('connect', () => {
+            connectionStatus.textContent = 'Connected';
+            connectionStatus.className = 'connected';
+            logToConsole('Connected to WebSocket server', 'system');
+            
+            // Update connection info
+            socketIdEl.textContent = socket.id;
+            connectionStateEl.textContent = 'Connected';
+            updateConnectionInfo();
+        });
+        
+        socket.on('disconnect', () => {
+            connectionStatus.textContent = 'Disconnected';
+            connectionStatus.className = 'disconnected';
+            logToConsole('Disconnected from WebSocket server', 'system');
+            
+            // Update connection info
+            connectionStateEl.textContent = 'Disconnected';
+            socketIdEl.textContent = 'Not connected';
+            isAuthenticated = false;
+            updateConnectionInfo();
+        });
+        
+        socket.on('connect_error', (error) => {
+            connectionStatus.textContent = 'Connection Error: ' + error.message;
+            connectionStatus.className = 'disconnected';
+            logToConsole('Connection error: ' + error.message, 'error');
+        });
+        
+        socket.on('reconnect_attempt', (attempt) => {
+            connectionStatus.textContent = `Reconnecting... (Attempt ${attempt})`;
+            connectionStatus.className = 'pending';
+            logToConsole(`Reconnection attemp~t ${attempt}`, 'system');
+        });
+        
+        socket.on('reconnect', (attempt) => {
+            connectionStatus.textContent = 'Reconnected';
+            connectionStatus.className = 'connected';
+            logToConsole(`Reconnected after ${attempt} attempts`, 'system');
+            
+            // If we had authenticated before, try to re-authenticate
+            const token = tokenInput.value.trim();
+            if (token) {
+                setTimeout(() => {
+                    logToConsole('Attempting to re-authenticate after reconnection...', 'system');
+                    socket.emit('authenticate', { token }, (response) => {
+                        logToConsole('Re-authentication response: ' + JSON.stringify(response), 'incoming');
+                    });
+                }, 1000);
+            }
+        });
+        
+        // Listen for step queue events
+        // Listen for worker and queue events from the server
+        socket.on('worker_log', (data) => {
+            if (data.type === 'worker_selected') {
+                logToConsole(`WORKER SELECTED: ${data.message}`, 'system', 'worker-selected');
+            } else if (data.type === 'step_added') {
+                logToConsole(`STEP ADDED: ${data.message}`, 'system', 'step-added');
+            } else if (data.type === 'step_instance_added') {
+                logToConsole(`STEP INSTANCE: ${data.message}`, 'system', 'step-instance');
+            } else {
+                logToConsole(`QUEUE EVENT: ${data.message}`, 'system', 'worker-selected');
+            }
+        });
+        
+        // Authentication
+        authenticateBtn.addEventListener('click', () => {
+            const token = tokenInput.value.trim();
+            if (!token) {
+                logToConsole('Please enter a token', 'error');
+                return;
+            }
+            
+            logToConsole('Authenticating...', 'outgoing');
+            socket.emit('authenticate', { token }, (response) => {
+                logToConsole('Authentication response: ' + JSON.stringify(response), 'incoming');
+                if (response.status === 'success') {
+                    logToConsole('Successfully authenticated!', 'system');
+                    isAuthenticated = true;
+                } 
+                // else {
+                //     logToConsole('Authentication failed: ' + response.message, 'error');
+                //     isAuthenticated = false;
+                // }
+                updateConnectionInfo();
+            });
+        });
+        
+        // Get valid token from server
+        getTokenBtn.addEventListener('click', () => {
+            logToConsole('Requesting valid token from server...', 'outgoing');
+            socket.emit('get_test_token', {}, (response) => {
+                logToConsole('Token response: ' + JSON.stringify(response), 'incoming');
+                if (response.status === 'success') {
+                    tokenInput.value = response.token;
+                    logToConsole('Retrieved valid token (expires: ' + response.expiresAt + ')', 'system');
+                } else {
+                    logToConsole('Failed to get token: ' + response.message, 'error');
+                }
+            });
+        });
+        
+        // Event handling
+        sendEventBtn.addEventListener('click', () => {
+            try {
+                const eventData = JSON.parse(eventDataTextarea.value);
+                logToConsole('Sending event: ' + JSON.stringify(eventData), 'outgoing');
+                
+                socket.emit('event_processor', eventData, (response) => {
+                    logToConsole('Event response: ' + JSON.stringify(response), 'incoming');
+                });
+            } catch (error) {
+                logToConsole('Invalid JSON: ' + error.message, 'error');
+            }
+        });
+        
+        // Log to console with timestamp
+        function logToConsole(message, type, subType = null) {
+            const timestamp = new Date().toISOString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            if (subType) {
+                logEntry.classList.add(subType);
+            }
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+            
+            // Also log to browser console for debugging
+            console.log(`[${timestamp}] ${message}`);
+        }
+        
+        // Use a pre-generated valid token that matches the server's secret key
+        const getSampleToken = () => {
+            // This token was generated with the same secret used by the server
+            // It is properly signed and will expire on 2026-09-23
+            return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0LXVzZXItMTIzIiwibmFtZSI6IlRlc3QgVXNlciIsInJvbGUiOiJ0ZXN0ZXIiLCJwZXJtaXNzaW9ucyI6WyJyZWFkIiwid3JpdGUiXSwiaWF0IjoxNzU4NjIxMTgzLCJleHAiOjE3OTAxNTcxODMsImF1ZCI6ImNydXgtY2xpZW50cyIsImlzcyI6ImNydXgtd2ViLXNvY2tldCJ9.jJb8TCnpNfFgxxvXEgvwAtsLZog7kQdZD9KBaOcQpc4';
+        };
+        
+        // Test connection
+        testConnectionBtn.addEventListener('click', () => {
+            // Send a ping to test the connection
+            logToConsole('Testing connection...', 'system');
+            
+            // First update the connection info display
+            updateConnectionInfo();
+            
+            // Ping the server with a simple event
+            socket.emit('ping', { timestamp: Date.now() }, (response) => {
+                if (response) {
+                    logToConsole('Server responded: ' + JSON.stringify(response), 'incoming');
+                } else {
+                    logToConsole('No response from server', 'error');
+                }
+            });
+        });
+        
+        // Helper function to update connection info display
+        function updateConnectionInfo() {
+            socketIdEl.textContent = socket.connected ? socket.id : 'Not connected';
+            connectionStateEl.textContent = socket.connected ? 'Connected' : 'Disconnected';
+            authStateEl.textContent = isAuthenticated ? 'Authenticated' : 'Not authenticated';
+            
+            // Set colors based on state
+            socketIdEl.style.color = socket.connected ? '#155724' : '#721c24';
+            connectionStateEl.style.color = socket.connected ? '#155724' : '#721c24';
+            authStateEl.style.color = isAuthenticated ? '#155724' : '#721c24';
+        }
+        
+        // Insert the sample token for convenience
+        tokenInput.value = getSampleToken();
+        
+        // Sample event templates
+        const createEntityTemplate = {
+            event: "create_entity_websocket",
+            config: {},
+            middleware: ["authentication"],
+            actions: [
+                {
+                    type: "execute_workflow",
+                    workflow: "create_entity",
+                    config: {
+                        resulting_event: "entity_created",
+                        relationship_type: "CREATOR"
+                    }
+                }
+            ]
+        };
+        
+        const updateEntityTemplate = {
+            event: "update_entity_websocket",
+            config: {},
+            middleware: ["authentication", "validation"],
+            actions: [
+                {
+                    type: "execute_workflow",
+                    workflow: "update_entity",
+                    config: {
+                        resulting_event: "entity_updated",
+                        validate_fields: true
+                    }
+                }
+            ]
+        };
+        
+        const deleteEntityTemplate = {
+            event: "delete_entity_websocket",
+            config: {},
+            middleware: ["authentication", "logging"],
+            actions: [
+                {
+                    type: "execute_workflow",
+                    workflow: "delete_entity",
+                    config: {
+                        resulting_event: "entity_deleted",
+                        cascade: true
+                    }
+                }
+            ]
+        };
+        
+        // Event template buttons
+        document.getElementById('load-create-entity').addEventListener('click', () => {
+            eventDataTextarea.value = JSON.stringify(createEntityTemplate, null, 2);
+            logToConsole('Loaded Create Entity template', 'system');
+        });
+        
+        document.getElementById('load-update-entity').addEventListener('click', () => {
+            eventDataTextarea.value = JSON.stringify(updateEntityTemplate, null, 2);
+            logToConsole('Loaded Update Entity template', 'system');
+        });
+        
+        document.getElementById('load-delete-entity').addEventListener('click', () => {
+            eventDataTextarea.value = JSON.stringify(deleteEntityTemplate, null, 2);
+            logToConsole('Loaded Delete Entity template', 'system');
+        });
+        
+        // Log filtering functionality
+        document.getElementById('filter-steps').addEventListener('change', function() {
+            const entries = document.querySelectorAll('.log-entry.step-added');
+            entries.forEach(entry => {
+                entry.style.display = this.checked ? 'block' : 'none';
+            });
+        });
+        
+        document.getElementById('filter-instances').addEventListener('change', function() {
+            const entries = document.querySelectorAll('.log-entry.step-instance');
+            entries.forEach(entry => {
+                entry.style.display = this.checked ? 'block' : 'none';
+            });
+        });
+        
+        document.getElementById('filter-workers').addEventListener('change', function() {
+            const entries = document.querySelectorAll('.log-entry.worker-selected');
+            entries.forEach(entry => {
+                entry.style.display = this.checked ? 'block' : 'none';
+            });
+        });
+        
+        document.getElementById('clear-logs').addEventListener('click', function() {
+            logContainer.innerHTML = '';
+            logToConsole('Logs cleared', 'system');
+        });
+    </script>
+</body>
+</html>

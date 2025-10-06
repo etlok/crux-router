@@ -18,82 +18,150 @@ const ioredis_1 = require("ioredis");
 const nest_winston_1 = require("nest-winston");
 const redis_logger_service_1 = require("./redis-logger.service");
 const uuid_1 = require("uuid");
+const worker_log_emitter_service_1 = require("../events/worker-log-emitter.service");
 let RouterService = class RouterService {
     redis;
     logger;
     redisLoggerService;
-    constructor(redis, logger, redisLoggerService) {
+    workerLogEmitterService;
+    constructor(redis, logger, redisLoggerService, workerLogEmitterService) {
         this.redis = redis;
         this.logger = logger;
         this.redisLoggerService = redisLoggerService;
+        this.workerLogEmitterService = workerLogEmitterService;
     }
-    async routeEvent(eventName, metadata) {
-        await this.redisLoggerService.logRequest('router', eventName, { metadata });
-        const workflowKey = `workflow:${eventName}`;
+    async routeEvent(workflowName, metadata) {
+        const workflowKey = `workflow:${workflowName}`;
         const workflowRaw = await this.redis.get(workflowKey);
         if (!workflowRaw) {
-            await this.redisLoggerService.logResponse('router', eventName, { error: `No workflow definition found for event: ${eventName}` });
-            throw new Error(`No workflow definition found for event: ${eventName}`);
+            await this.redisLoggerService.logResponse('router', workflowName, { error: `No workflow definition found for: ${workflowName}` });
+            throw new Error(`No workflow definition found for: ${workflowName}`);
         }
-        const workflowTemplate = JSON.parse(workflowRaw);
+        const workflowDefinition = JSON.parse(workflowRaw);
+        this.logger.log(`Found workflow definition for ${workflowName}: ${JSON.stringify(workflowDefinition)}`);
         const workflow_instance_id = `workflow_instance:${(0, uuid_1.v4)()}`;
         const request_id = `req-${(0, uuid_1.v4)()}`;
-        workflowTemplate.data = {
-            ...workflowTemplate.data,
-            payload: metadata,
-            workflow_instance_id,
-            request_id
-        };
-        workflowTemplate.metadata = {
-            ...workflowTemplate.metadata,
-            start_time: new Date().toISOString(),
-            end_time: "",
-            status: "pending",
-            current_step: workflowTemplate.definition.steps[0]?.step_instance_id || ""
-        };
-        for (const step of workflowTemplate.definition.steps) {
-            const step_instance_id = step.step_instance_id || `step_instance:${(0, uuid_1.v4)()}`;
-            step.step_instance_id = step_instance_id;
-            const stepWorkflowKey = step.definition.workflow_key || step.definition.type || step.definition.class;
-            const workflowDefKey = `workflow:${stepWorkflowKey}`;
-            const workflowDefRaw = await this.redis.get(workflowDefKey);
-            if (!workflowDefRaw) {
-                this.logger.warn(`No workflow definition found for step: ${step_instance_id} (key: ${workflowDefKey})`);
-                continue;
-            }
-            const workflowDef = JSON.parse(workflowDefRaw);
-            const workers = workflowDef.workers;
-            if (!workers || Object.keys(workers).length === 0) {
-                this.logger.warn(`No workers defined for step: ${step_instance_id} (workflow: ${workflowDefKey})`);
-                continue;
-            }
-            const eligibleWorkers = Object.entries(workers).map(([worker_id, details]) => ({
-                worker_id,
-                ...details
-            }));
-            const chosenWorker = eligibleWorkers.reduce((prev, curr) => prev.threads <= curr.threads ? prev : curr);
-            step.data = {
-                ...step.data,
-                worker_instance_id: chosenWorker.instance_id,
-                worker_id: chosenWorker.worker_id
-            };
-            await this.redis.hset(step_instance_id, 'definition', JSON.stringify(step.definition), 'data', JSON.stringify(step.data), 'metadata', JSON.stringify(step.metadata));
-            const queueKey = `worker_instance:${chosenWorker.instance_id}:queue`;
-            const queueItem = {
-                workflow_instance_id,
-                step_instance_id
-            };
-            await this.redis.lpush(queueKey, JSON.stringify(queueItem));
+        let workerIds = [];
+        const workflowWorkers = await this.redis.hgetall(`workflow:${workflowName}:workers`);
+        if (workflowWorkers && Object.keys(workflowWorkers).length > 0) {
+            workerIds = Object.keys(workflowWorkers);
+            this.logger.log(`Found ${workerIds.length} workers from hash for workflow: ${workflowName}`);
         }
-        await this.redis.hset(workflow_instance_id, 'definition', JSON.stringify(workflowTemplate.definition), 'data', JSON.stringify(workflowTemplate.data), 'metadata', JSON.stringify(workflowTemplate.metadata));
-        await this.redisLoggerService.logResponse('router', eventName, {
+        else {
+            workerIds = await this.redis.smembers(`workflow:${workflowName}:worker_list`);
+            if (workerIds && workerIds.length > 0) {
+                this.logger.log(`Found ${workerIds.length} workers from set for workflow: ${workflowName}`);
+            }
+            else {
+                await this.redisLoggerService.logResponse('router', workflowName, { error: `No workers found for workflow: ${workflowName}` });
+                throw new Error(`No workers found for workflow: ${workflowName}`);
+            }
+        }
+        this.logger.log(`Found ${workerIds.length} workers for workflow: ${workflowName}`);
+        const workerInstances = [];
+        for (const workerId of workerIds) {
+            const instancesKey = `crux:component:${workerId}:instances`;
+            const instanceIds = await this.redis.smembers(instancesKey);
+            if (!instanceIds || instanceIds.length === 0) {
+                this.logger.warn(`No instances found for worker: ${workerId}`);
+                continue;
+            }
+            for (const instanceId of instanceIds) {
+                const instanceDetails = await this.redis.hgetall(instanceId);
+                if (instanceDetails && instanceDetails.status === 'online') {
+                    workerInstances.push({
+                        worker_id: workerId,
+                        instance_id: instanceId,
+                        current_thread_count: parseInt(instanceDetails.current_thread_count || '0', 10),
+                        thread_capacity: parseInt(instanceDetails.thread_capacity || '1000', 10),
+                        utilization: (parseInt(instanceDetails.current_thread_count || '0', 10) / parseInt(instanceDetails.thread_capacity || '1000', 10)) * 100
+                    });
+                }
+            }
+        }
+        if (workerInstances.length === 0) {
+            await this.redisLoggerService.logResponse('router', workflowName, { error: `No active worker instances found for workflow: ${workflowName}` });
+            throw new Error(`No active worker instances found for workflow: ${workflowName}`);
+        }
+        workerInstances.sort((a, b) => a.utilization - b.utilization);
+        const chosenWorker = workerInstances[0];
+        const workerSelectedMsg = `Selected worker instance: ${chosenWorker.instance_id} (${chosenWorker.worker_id}) with utilization: ${chosenWorker.utilization}%`;
+        this.logger.log(workerSelectedMsg);
+        this.workerLogEmitterService.emitWorkerLog(workerSelectedMsg);
+        const stepInstances = [];
+        if (workflowDefinition.steps && workflowDefinition.steps.length > 0) {
+            for (const step of workflowDefinition.steps) {
+                const step_instance_id = `step_instance:${(0, uuid_1.v4)()}`;
+                const stepInstance = {
+                    definition: {
+                        type: step.type,
+                        class: step.class
+                    },
+                    data: {
+                        workflow_instance_id,
+                        worker_id: chosenWorker.worker_id,
+                        worker_instance_id: chosenWorker.instance_id,
+                        config: metadata?.config || {},
+                        metadata: metadata || {}
+                    },
+                    metadata: {
+                        start_time: "",
+                        end_time: "",
+                        status: "pending"
+                    }
+                };
+                await this.redis.hset(step_instance_id, 'definition', JSON.stringify(stepInstance.definition), 'data', JSON.stringify(stepInstance.data), 'metadata', JSON.stringify(stepInstance.metadata));
+                stepInstances.push(step_instance_id);
+                const queueKey = `worker_instance:${chosenWorker.instance_id}:queue`;
+                const queueItem = {
+                    workflow_instance_id,
+                    step_instance_id
+                };
+                await this.redis.lpush(queueKey, JSON.stringify(queueItem));
+                const stepAddedMsg = `Added step ${step_instance_id} to queue ${queueKey}`;
+                this.logger.log(stepAddedMsg);
+                this.workerLogEmitterService.emitWorkerLog(stepAddedMsg);
+                await this.redis.hincrby(chosenWorker.instance_id, 'current_thread_count', 1);
+            }
+        }
+        const workflowInstance = {
+            definition: {
+                hooks: workflowDefinition.hooks || {
+                    on_start: {},
+                    on_complete: {},
+                    on_failure: {}
+                },
+                steps: stepInstances
+            },
+            data: {
+                workflow: workflowName,
+                payload: metadata || {},
+                workflow_instance_id,
+                request_id
+            },
+            metadata: {
+                start_time: new Date().toISOString(),
+                end_time: "",
+                status: "pending",
+                current_step: stepInstances[0] || ""
+            }
+        };
+        await this.redis.hset(workflow_instance_id, 'definition', JSON.stringify(workflowInstance.definition), 'data', JSON.stringify(workflowInstance.data), 'metadata', JSON.stringify(workflowInstance.metadata));
+        await this.redisLoggerService.logResponse('router', workflowName, {
             workflow_instance_id,
-            request_id
+            request_id,
+            steps: stepInstances,
+            worker: {
+                id: chosenWorker.worker_id,
+                instance: chosenWorker.instance_id,
+                utilization: chosenWorker.utilization
+            }
         });
         return {
             status: 'workflow_started',
             workflow_instance_id,
-            request_id
+            request_id,
+            steps: stepInstances
         };
     }
 };
@@ -102,6 +170,8 @@ exports.RouterService = RouterService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, common_1.Inject)('REDIS_CLIENT')),
     __param(1, (0, common_1.Inject)(nest_winston_1.WINSTON_MODULE_NEST_PROVIDER)),
-    __metadata("design:paramtypes", [ioredis_1.default, Object, redis_logger_service_1.RedisLoggerService])
+    __param(3, (0, common_1.Inject)((0, common_1.forwardRef)(() => worker_log_emitter_service_1.WorkerLogEmitterService))),
+    __metadata("design:paramtypes", [ioredis_1.default, Object, redis_logger_service_1.RedisLoggerService,
+        worker_log_emitter_service_1.WorkerLogEmitterService])
 ], RouterService);
 //# sourceMappingURL=router.service.js.map

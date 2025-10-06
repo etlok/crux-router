@@ -12,12 +12,19 @@ import {
 import { Server, Socket } from 'socket.io';
 import { RedisService } from 'src/redis/redis.service';
 import { RouterService } from 'src/router/router.service';
-import { Logger, UseGuards } from '@nestjs/common';
+import { Logger, UseGuards, Inject, UseInterceptors } from '@nestjs/common';
 import { EventPayloadDto } from './dto/event-payload.dto';
 import { v4 as uuidv4 } from 'uuid'; 
 import { ClientAuthService } from './client-auth.service';
+import { WsAuthMiddleware } from 'src/middleware/ws-auth.middleware';
+import { WsAuthInterceptor } from 'src/middleware/ws-auth.interceptor';
+import { WsAuthGuard } from 'src/middleware/ws-auth.guard';
+import { DynamicWsMiddlewareInterceptor } from 'src/middleware/dynamic-ws-middleware.interceptor';
+import { EventProcessorService } from 'src/events/event-processor.service';
+import { WorkerLogEmitterService } from 'src/events/worker-log-emitter.service';
 
 @WebSocketGateway({ cors: true })
+@UseInterceptors(DynamicWsMiddlewareInterceptor)
 export class WSGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
 
@@ -28,14 +35,21 @@ private readonly rateLimiter = new Map<string, { count: number, resetTime: numbe
 private readonly RATE_LIMIT = 50; // messages per minute
 private readonly RATE_WINDOW = 60000; // 1 minute in ms
 private connectedClients = new Set<string>();
-  private authenticatedClients = new Set<string>();
+private authenticatedClients = new Set<string>();
 
-  constructor(private redisService: RedisService, private routerService: RouterService,
-     private clientAuthService: ClientAuthService
+  constructor(
+    private redisService: RedisService, 
+    private routerService: RouterService,
+    private clientAuthService: ClientAuthService,
+    private wsAuthMiddleware: WsAuthMiddleware,
+    private eventProcessorService: EventProcessorService,
+    private workerLogEmitterService: WorkerLogEmitterService
   ) {}
 
   async afterInit() {
     this.logger.log('WebSocket Gateway initialized');
+    // Provide the server instance to the WorkerLogEmitterService
+    this.workerLogEmitterService.setServer(this.server);
     await this.subscribeToWorkerResponses();
   }
 
@@ -74,42 +88,35 @@ private connectedClients = new Set<string>();
   }
 
  async handleConnection(client: Socket) {
-    // Get JWT token from handshake
-    const token = client.handshake.auth.token || 
-                  client.handshake.headers['authorization']?.replace('Bearer ', '');
+    this.logger.log(`Client connected: ${client.id}`);
+    this.connectedClients.add(client.id);
     
-    // Store token in socket data for future reference
-    client.data.token = token;
+    // Use the auth middleware to authenticate the client
+    const user = await this.wsAuthMiddleware.authenticate(client);
     
-    // Check if token is provided
-    if (!token) {
-      this.logger.warn(`Client connected without token: ${client.id}`);
-      // Give a grace period for authentication
-      setTimeout(() => {
-        if (!this.authenticatedClients.has(client.id)) {
-          client.disconnect(true);
-          this.logger.warn(`Disconnected unauthenticated client: ${client.id}`);
-        }
-      }, 10000); // 10 seconds grace period
-    } else {
-      try {
-        // Validate the JWT token
-        const payload = await this.clientAuthService.validateToken(token);
-        
-        // Store user info from token payload in socket data
-        client.data.user = payload;
-        
-        // Mark client as authenticated
-        this.authenticatedClients.add(client.id);
-        this.logger.log(`Authenticated client connected: ${client.id}, user: ${payload.sub || payload.id || 'unknown'}`);
-      } catch (err) {
-        this.logger.warn(`Client with invalid token rejected: ${client.id}`);
-        client.disconnect(true);
-        return;
+    if (user) {
+      // Client is authenticated
+      this.authenticatedClients.add(client.id);
+      this.logger.log(`Client authenticated: ${client.id} (${user.sub || user.id || 'unknown'})`);
+      
+      // Add client to their user-specific room if they have a user ID
+      if (user.sub) {
+        client.join(`user:${user.sub}`);
       }
+    } else {
+      // Give a grace period for authentication via explicit authenticate event
+      this.logger.log(`Client not authenticated on connection: ${client.id}`);
+      
+      // Extend the grace period for authentication
+      setTimeout(() => {
+        if (client.connected && !this.authenticatedClients.has(client.id)) {
+          this.logger.warn(`Client ${client.id} still not authenticated after grace period, but allowing connection`);
+          // We're not disconnecting - allowing time for the client to authenticate via the authenticate event
+          // client.disconnect(true);
+        }
+      }, 60000); // 60 seconds grace period
     }
     
-    this.connectedClients.add(client.id);
     this.logger.log(`Client connected: ${client.id}, total: ${this.connectedClients.size}`);
   }
 
@@ -135,27 +142,31 @@ private connectedClients = new Set<string>();
     }
     
     try {
-      // Store token in socket data
-      client.data.token = data.token;
+      // Update the token in handshake auth for the middleware to use
+      client.handshake.auth.token = data.token;
       
-      // Validate JWT token
-      const payload = await this.clientAuthService.validateToken(data.token);
+      // Use our authentication middleware
+      const user = await this.wsAuthMiddleware.authenticate(client);
       
-      // Store user info from token payload
-      client.data.user = payload;
+      // if (!user) {
+      //   return { status: 'error', message: client.data.authError || 'Authentication failed' };
+      // }
       
-      // Mark client as authenticated
-      this.authenticatedClients.add(client.id);
-      this.logger.log(`Client authenticated: ${client.id}, user: ${payload.sub || payload.id || 'unknown'}`);
+      // Mark client as authenticated if not already
+      if (!this.authenticatedClients.has(client.id)) {
+        this.authenticatedClients.add(client.id);
+      }
+      
+      this.logger.log(`Client authenticated via message: ${client.id}, user: ${user.sub || user.id || 'unknown'}`);
       
       return { 
         status: 'success', 
         message: 'Authentication successful',
         user: { 
-          id: payload.sub || payload.id,
+          id: user.sub || user.id,
           // Include other non-sensitive user info as needed
-          roles: payload.roles || [],
-          name: payload.name
+          roles: user.roles || [],
+          name: user.name
         }
       };
     } catch (err) {
@@ -260,6 +271,119 @@ private connectedClients = new Set<string>();
       timestamp: new Date().toISOString()
     };
 
+    }
+  }
+
+
+  @SubscribeMessage('event_processor')
+  async handleEventWithMiddleware(@MessageBody() data: any, @ConnectedSocket() client: Socket) {
+    const clientId = client.id;
+    this.logger.log(`Received event_processor request from client ${clientId}`);
+
+    // Check if client is authenticated
+    // if (!this.authenticatedClients.has(clientId)) {
+    //   this.logger.warn(`Unauthenticated event from client: ${clientId}`);
+    //   return { 
+    //     status: 'error', 
+    //     code: 'UNAUTHORIZED',
+    //     message: 'Authentication required. Please authenticate first.',
+    //     timestamp: new Date().toISOString()
+    //   };
+    // }
+
+    // Check rate limit
+    const now = Date.now();
+    let limit = this.rateLimiter.get(clientId);
+    
+    if (!limit || now > limit.resetTime) {
+      limit = { count: 1, resetTime: now + this.RATE_WINDOW };
+      this.rateLimiter.set(clientId, limit);
+    } else if (limit.count >= this.RATE_LIMIT) {
+      this.logger.warn(`Rate limit exceeded for client ${clientId}`);
+      return { status: 'error', message: 'Rate limit exceeded. Try again later.' };
+    } else {
+      limit.count++;
+    }
+
+    try {
+      // Validate input format
+      if (!data || !data.event) {
+        throw new WsException('Invalid event format: missing event name');
+      }
+
+      if (!Array.isArray(data.middleware)) {
+        throw new WsException('Invalid event format: middleware must be an array');
+      }
+
+      if (!Array.isArray(data.actions)) {
+        throw new WsException('Invalid event format: actions must be an array');
+      }
+
+      // payload source context with client information - without circular references
+      const sourceContext = {
+        socketId: client.id,
+        userId: client.data?.user?.sub || client.data?.user?.id,
+        userInfo: client.data?.user,
+        isAuthenticated: this.authenticatedClients.has(client.id),
+        // Include clientData but not the Socket object itself
+        clientData: client.data
+      };
+
+      // Process the event through middleware chain
+      const result = await this.eventProcessorService.processEvent(data, sourceContext);
+
+      return {
+        status: 'success',
+        requestId: uuidv4(),
+        timestamp: new Date().toISOString(),
+        data: result
+      };
+    } catch (err) {
+      this.logger.error(`Failed to process event: ${err.message}`);
+      return {
+        status: 'error',
+        code: err.code || 'INTERNAL_ERROR',
+        message: err.message || 'An unexpected error occurred',
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  /**
+   * Simple ping handler for testing connection
+   */
+  @SubscribeMessage('ping')
+  async handlePing(@MessageBody() data: any, @ConnectedSocket() client: Socket) {
+    this.logger.log(`Received ping from client ${client.id}`);
+    return {
+      pong: true,
+      timestamp: Date.now(),
+      clientId: client.id,
+      isAuthenticated: this.authenticatedClients.has(client.id),
+      receivedData: data
+    };
+  }
+
+  /**
+   * Get a test token for development use
+   * This allows clients to get a properly signed token for testing
+   */
+  @SubscribeMessage('get_test_token')
+  async getTestToken() {
+    try {
+      const tokenInfo = this.clientAuthService.getSampleTestTokenWithInfo();
+      return {
+        status: 'success',
+        token: tokenInfo.token,
+        expiresAt: new Date(tokenInfo.payload.exp * 1000).toISOString(),
+        payload: tokenInfo.payload
+      };
+    } catch (error) {
+      this.logger.error(`Failed to generate test token: ${error.message}`);
+      return { 
+        status: 'error', 
+        message: 'Failed to generate test token' 
+      };
     }
   }
 

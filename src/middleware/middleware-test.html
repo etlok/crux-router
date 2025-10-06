@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Middleware Test</title>
+    <script src="https://cdn.socket.io/4.4.1/socket.io.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .output {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            margin-top: 10px;
+            height: 300px;
+            overflow-y: auto;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .token-input {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Dynamic Middleware Test Client</h1>
+    
+    <div>
+        <h2>Connection</h2>
+        <p>
+            <button id="connectBtn">Connect</button>
+            <button id="disconnectBtn">Disconnect</button>
+            <span id="connectionStatus">Disconnected</span>
+        </p>
+    </div>
+
+    <div>
+        <h2>Authentication</h2>
+        <p>
+            <input type="text" id="tokenInput" class="token-input" placeholder="Enter JWT token here">
+            <button id="authenticateBtn">Authenticate</button>
+        </p>
+    </div>
+
+    <div>
+        <h2>Test Events</h2>
+        <p>
+            <button id="pingBtn">Send Ping</button>
+            <button id="authRequiredBtn">Send Auth Required Event</button>
+            <button id="triggerErrorBtn">Trigger Error</button>
+        </p>
+    </div>
+
+    <div>
+        <h2>Output</h2>
+        <div id="output" class="output"></div>
+    </div>
+
+    <script>
+        let socket;
+        const output = document.getElementById('output');
+        const connectionStatus = document.getElementById('connectionStatus');
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const color = type === 'error' ? 'red' : 
+                          type === 'success' ? 'green' : 'black';
+            
+            output.innerHTML += `<div style="color: ${color};">[${timestamp}] ${message}</div>`;
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        document.getElementById('connectBtn').addEventListener('click', () => {
+            try {
+                socket = io('http://localhost:3000');
+                
+                socket.on('connect', () => {
+                    connectionStatus.textContent = 'Connected';
+                    connectionStatus.style.color = 'green';
+                    log('Connected to server', 'success');
+                    
+                    // Listen for middleware events
+                    socket.on('middleware:log', (data) => {
+                        log(`Middleware Log: ${data.message}`, 'info');
+                    });
+
+                    socket.on('error', (error) => {
+                        log(`Error: ${error.message}`, 'error');
+                    });
+
+                    socket.on('authenticated', (data) => {
+                        log(`Authentication: ${data.success ? 'Success' : 'Failed'}`, data.success ? 'success' : 'error');
+                    });
+
+                    socket.on('pong', (data) => {
+                        log(`Received pong: ${JSON.stringify(data)}`, 'success');
+                    });
+                });
+                
+                socket.on('disconnect', () => {
+                    connectionStatus.textContent = 'Disconnected';
+                    connectionStatus.style.color = 'red';
+                    log('Disconnected from server', 'error');
+                });
+                
+                socket.on('connect_error', (error) => {
+                    connectionStatus.textContent = 'Connection Error';
+                    connectionStatus.style.color = 'red';
+                    log(`Connection Error: ${error.message}`, 'error');
+                });
+            } catch (error) {
+                log(`Error creating connection: ${error.message}`, 'error');
+            }
+        });
+        
+        document.getElementById('disconnectBtn').addEventListener('click', () => {
+            if (socket) {
+                socket.disconnect();
+            }
+        });
+        
+        document.getElementById('authenticateBtn').addEventListener('click', () => {
+            if (!socket || !socket.connected) {
+                log('Not connected to server', 'error');
+                return;
+            }
+            
+            const token = document.getElementById('tokenInput').value;
+            if (!token) {
+                log('Please enter a JWT token', 'error');
+                return;
+            }
+            
+            log('Sending authentication request...');
+            socket.emit('authenticate', { token }, (response) => {
+                if (response.success) {
+                    log(`Authentication successful: ${response.message}`, 'success');
+                } else {
+                    log(`Authentication failed: ${response.message}`, 'error');
+                }
+            });
+        });
+        
+        document.getElementById('pingBtn').addEventListener('click', () => {
+            if (!socket || !socket.connected) {
+                log('Not connected to server', 'error');
+                return;
+            }
+            
+            log('Sending ping...');
+            socket.emit('ping', { timestamp: Date.now() });
+        });
+        
+        document.getElementById('authRequiredBtn').addEventListener('click', () => {
+            if (!socket || !socket.connected) {
+                log('Not connected to server', 'error');
+                return;
+            }
+            
+            log('Sending protected event...');
+            socket.emit('protected', { data: 'This requires authentication' });
+        });
+        
+        document.getElementById('triggerErrorBtn').addEventListener('click', () => {
+            if (!socket || !socket.connected) {
+                log('Not connected to server', 'error');
+                return;
+            }
+            
+            log('Sending event to trigger error...');
+            socket.emit('trigger-error', { data: 'This should trigger an error in middleware' });
+        });
+    </script>
+</body>
+</html>

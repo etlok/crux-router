@@ -1,0 +1,34 @@
+[
+  {
+    "event": "user_login",
+    "config": {
+      "websocket_method": "authenticate"
+    },
+    "middleware": ["auth", "log"],
+    "actions": [
+      {
+        "type": "execute_workflow",
+        "workflow": "user_login_workflow",
+        "config": {
+          "channel_id": "user_channel"
+        }
+      }
+    ]
+  },
+  {
+    "event": "message_received",
+    "config": {
+      "websocket_method": "message"
+    },
+    "middleware": ["auth", "log", "validation"],
+    "actions": [
+      {
+        "type": "execute_workflow",
+        "workflow": "process_message_workflow",
+        "config": {
+          "channel_id": "message_channel"
+        }
+      }
+    ]
+  }
+]

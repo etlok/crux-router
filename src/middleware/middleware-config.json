@@ -1,0 +1,7 @@
+{
+  "activeMiddlewares": [
+    "auth",
+    "log",
+    "errorHandling"
+  ]
+}

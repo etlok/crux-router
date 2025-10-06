@@ -126,6 +126,35 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
             throw error;
         }
     }
+    getSampleToken() {
+        try {
+            const tokenInfo = this.clientAuthService.getSampleTestTokenWithInfo();
+            return {
+                status: 'success',
+                token: tokenInfo.token,
+                payload: tokenInfo.payload,
+                usage: {
+                    headers: {
+                        'Authorization': `Bearer ${tokenInfo.token}`
+                    },
+                    websocket_payload: {
+                        auth: {
+                            token: tokenInfo.token
+                        },
+                        event: "initialize",
+                        payload: {
+                            channels: ["channel1", "channel2"]
+                        }
+                    },
+                    curl: `curl -X POST http://localhost:3000/websocket/initialize -H "Content-Type: application/json" -d '{"auth":{"token":"${tokenInfo.token}"},"event":"initialize","payload":{"channels":["channel1"]}}'`
+                }
+            };
+        }
+        catch (error) {
+            this.logger.error(`Sample token generation failed: ${error.message}`);
+            throw error;
+        }
+    }
     async broadcastMessage(broadcastDto) {
         try {
             if (!broadcastDto.event || !broadcastDto.data) {
@@ -227,7 +256,7 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
         }
         return (0, uuid_1.v4)();
     }
-    async initialize(initializeDto) {
+    async initialize(initializeDto, req) {
         try {
             this.logger.log(`Initialize request received: ${JSON.stringify(initializeDto)}`);
             if (initializeDto.event !== 'initialize') {
@@ -237,16 +266,18 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
                 throw new common_1.BadRequestException('Invalid payload format. Channels array is required.');
             }
             let authenticatedUserId = null;
-            if (initializeDto.auth && Object.keys(initializeDto.auth).length > 0) {
-                if (initializeDto.auth.token) {
-                    try {
-                        const payload = await this.clientAuthService.validateToken(initializeDto.auth.token);
-                        authenticatedUserId = payload.sub || payload.id;
-                        this.logger.log(`Authenticated user: ${authenticatedUserId}`);
-                    }
-                    catch (error) {
-                        this.logger.warn(`Authentication failed: ${error.message}`);
-                    }
+            if (req.isAuthenticated && req.user) {
+                authenticatedUserId = req.user.sub || req.user.id;
+                this.logger.log(`User authenticated by middleware: ${authenticatedUserId}`);
+            }
+            else if (initializeDto.auth && initializeDto.auth.token) {
+                try {
+                    const payload = await this.clientAuthService.validateToken(initializeDto.auth.token);
+                    authenticatedUserId = payload.sub || payload.id;
+                    this.logger.log(`User authenticated manually: ${authenticatedUserId}`);
+                }
+                catch (error) {
+                    this.logger.warn(`Authentication failed: ${error.message}`);
                 }
             }
             const channelResults = await Promise.all(initializeDto.payload.channels.map(async (channelId) => {
@@ -281,7 +312,7 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
             throw error;
         }
     }
-    async channelBroadcast(broadcastDto) {
+    async channelBroadcast(broadcastDto, req) {
         try {
             this.logger.log(`Broadcast request received: ${JSON.stringify(broadcastDto)}`);
             if (broadcastDto.event !== 'broadcast') {
@@ -293,6 +324,10 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
             if (!broadcastDto.payload) {
                 throw new common_1.BadRequestException('Payload is required');
             }
+            if (req.isAuthenticated && req.user) {
+                this.logger.log(`Broadcast from authenticated user: ${req.user.sub || req.user.id}`);
+            }
+            console.log(broadcastDto);
             for (const channelId of broadcastDto.channel_ids) {
                 const channelExists = await this.redisService.exists(`channel:${channelId}`);
                 if (!channelExists) {
@@ -352,6 +387,12 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], WebSocketController.prototype, "revokeToken", null);
 __decorate([
+    (0, common_1.Get)('sample-token'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], WebSocketController.prototype, "getSampleToken", null);
+__decorate([
     (0, common_1.Post)('broadcast'),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -374,15 +415,17 @@ __decorate([
 __decorate([
     (0, common_1.Post)('initialize'),
     __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [InitializeDto]),
+    __metadata("design:paramtypes", [InitializeDto, Object]),
     __metadata("design:returntype", Promise)
 ], WebSocketController.prototype, "initialize", null);
 __decorate([
     (0, common_1.Post)('broadcast'),
     __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [ChannelBroadcastDto]),
+    __metadata("design:paramtypes", [ChannelBroadcastDto, Object]),
     __metadata("design:returntype", Promise)
 ], WebSocketController.prototype, "channelBroadcast", null);
 exports.WebSocketController = WebSocketController = WebSocketController_1 = __decorate([

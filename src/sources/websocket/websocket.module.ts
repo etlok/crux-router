@@ -4,9 +4,23 @@ import { RedisService } from 'src/redis/redis.service';
 import { RouterService } from 'src/router/router.service';
 import { ClientAuthService } from './client-auth.service';
 import { WebSocketController } from './websocket.controller';
+import { WsAuthMiddleware } from 'src/middleware/ws-auth.middleware';
+import { MiddlewareModule } from 'src/middleware/middleware.module';
+import { EventsModule } from 'src/events/events.module';
 
 @Module({
-  providers: [WSGateway, RedisService, RouterService, ClientAuthService],
+  imports: [
+    MiddlewareModule, // Import the MiddlewareModule to access its exported providers
+    EventsModule // Import EventsModule for event processing
+  ],
+  providers: [
+    WSGateway, 
+    
+    RedisService, 
+    RouterService, 
+    ClientAuthService, 
+    WsAuthMiddleware
+  ],
   controllers: [WebSocketController],
   exports: [WSGateway],
 })

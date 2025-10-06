@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JWT WebSocket Test</title>
+    <script src="https://cdn.socket.io/4.4.1/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .panel {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        h2 {
+            margin-top: 0;
+            color: #333;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 15px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:disabled {
+            background-color: #cccccc;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .logs {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background-color: #f9f9f9;
+            margin-top: 20px;
+        }
+        .log-entry {
+            border-bottom: 1px solid #eee;
+            padding: 5px 0;
+        }
+        .token-display {
+            word-break: break-all;
+            background-color: #f0f8ff;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .success {
+            color: green;
+        }
+        .error {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>JWT WebSocket Authentication Test</h1>
+        
+        <div class="panel">
+            <h2>Step 1: Get Sample Token</h2>
+            <p>Click the button below to get a sample JWT token from the server.</p>
+            <button id="getTokenBtn">Get Sample Token</button>
+            <div id="tokenInfo" style="display: none;">
+                <h3>Sample Token:</h3>
+                <div id="tokenDisplay" class="token-display"></div>
+                <h3>Decoded Payload:</h3>
+                <pre id="payloadDisplay"></pre>
+            </div>
+        </div>
+        
+        <div class="panel">
+            <h2>Step 2: Connect to WebSocket</h2>
+            <p>Connect to the WebSocket server with the token.</p>
+            <button id="connectBtn">Connect WebSocket</button>
+            <button id="disconnectBtn" disabled>Disconnect</button>
+            <div id="socketStatus"></div>
+        </div>
+        
+        <div class="panel">
+            <h2>Step 3: Initialize Channels</h2>
+            <p>Initialize channels and verify authentication.</p>
+            <input type="text" id="channelsInput" value="channel1,channel2" placeholder="Channel names (comma-separated)" style="width: 300px; padding: 8px;">
+            <button id="initChannelsBtn" disabled>Initialize Channels</button>
+            <div id="channelStatus"></div>
+        </div>
+        
+        <div class="panel">
+            <h2>Step 4: Broadcast to Channels</h2>
+            <p>Send a broadcast message to specific channels.</p>
+            <input type="text" id="broadcastChannelsInput" value="channel1" placeholder="Target channels (comma-separated)" style="width: 300px; padding: 8px;">
+            <textarea id="messageInput" rows="4" cols="50" placeholder="Message content (JSON format)">{"message": "Test broadcast message", "timestamp": "2025-09-10T12:00:00Z"}</textarea>
+            <button id="broadcastBtn" disabled>Broadcast Message</button>
+            <div id="broadcastStatus"></div>
+        </div>
+        
+        <h2>Activity Log</h2>
+        <div id="logs" class="logs"></div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const getTokenBtn = document.getElementById('getTokenBtn');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const initChannelsBtn = document.getElementById('initChannelsBtn');
+        const broadcastBtn = document.getElementById('broadcastBtn');
+        const tokenDisplay = document.getElementById('tokenDisplay');
+        const payloadDisplay = document.getElementById('payloadDisplay');
+        const tokenInfo = document.getElementById('tokenInfo');
+        const socketStatus = document.getElementById('socketStatus');
+        const channelStatus = document.getElementById('channelStatus');
+        const broadcastStatus = document.getElementById('broadcastStatus');
+        const logs = document.getElementById('logs');
+        const channelsInput = document.getElementById('channelsInput');
+        const broadcastChannelsInput = document.getElementById('broadcastChannelsInput');
+        const messageInput = document.getElementById('messageInput');
+        
+        // Global variables
+        let socket;
+        let token;
+        let payload;
+        const API_BASE_URL = 'http://localhost:3000';
+        
+        // Helper function to log messages
+        function logMessage(message, type = 'info') {
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            logEntry.innerHTML = `<strong>${timestamp}</strong>: ${message}`;
+            logs.prepend(logEntry);
+        }
+        
+        // Get sample token from server
+        getTokenBtn.addEventListener('click', async () => {
+            try {
+                logMessage('Requesting sample token from server...');
+                const response = await axios.get(`${API_BASE_URL}/websocket/sample-token`);
+                
+                if (response.data && response.data.token) {
+                    token = response.data.token;
+                    payload = response.data.payload;
+                    
+                    // Display token and payload
+                    tokenDisplay.textContent = token;
+                    payloadDisplay.textContent = JSON.stringify(payload, null, 2);
+                    tokenInfo.style.display = 'block';
+                    
+                    // Update status
+                    logMessage('Sample token received successfully', 'success');
+                    connectBtn.disabled = false;
+                    
+                    // Also update the broadcast channel input based on the payload
+                    if (payload && payload.permissions) {
+                        broadcastChannelsInput.value = channelsInput.value;
+                    }
+                } else {
+                    logMessage('Failed to get token: Invalid server response', 'error');
+                }
+            } catch (error) {
+                logMessage(`Error getting token: ${error.message}`, 'error');
+                console.error('Error details:', error);
+            }
+        });
+        
+        // Connect to WebSocket server
+        connectBtn.addEventListener('click', () => {
+            try {
+                if (!token) {
+                    logMessage('Please get a token first', 'error');
+                    return;
+                }
+                
+                logMessage('Connecting to WebSocket server...');
+                
+                // Initialize Socket.IO with auth
+                socket = io(API_BASE_URL, {
+                    transports: ['websocket'],
+                    auth: {
+                        token: token
+                    }
+                });
+                
+                // Socket event handlers
+                socket.on('connect', () => {
+                    logMessage(`Connected to WebSocket server. Socket ID: ${socket.id}`, 'success');
+                    socketStatus.innerHTML = `<p class="success">Connected ✓ (ID: ${socket.id})</p>`;
+                    connectBtn.disabled = true;
+                    disconnectBtn.disabled = false;
+                    initChannelsBtn.disabled = false;
+                });
+                
+                socket.on('disconnect', () => {
+                    logMessage('Disconnected from WebSocket server');
+                    socketStatus.innerHTML = '<p>Disconnected</p>';
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                    initChannelsBtn.disabled = true;
+                    broadcastBtn.disabled = true;
+                });
+                
+                socket.on('connect_error', (error) => {
+                    logMessage(`Connection error: ${error.message}`, 'error');
+                    socketStatus.innerHTML = `<p class="error">Connection failed: ${error.message}</p>`;
+                });
+                
+                // Listen for incoming events
+                socket.on('outgoing_event', (data) => {
+                    logMessage(`Received event: ${JSON.stringify(data)}`, 'success');
+                });
+                
+            } catch (error) {
+                logMessage(`Error connecting: ${error.message}`, 'error');
+            }
+        });
+        
+        // Disconnect from WebSocket server
+        disconnectBtn.addEventListener('click', () => {
+            if (socket) {
+                socket.disconnect();
+                logMessage('Manually disconnected from WebSocket server');
+            }
+        });
+        
+        // Initialize channels
+        initChannelsBtn.addEventListener('click', async () => {
+            try {
+                if (!socket || !socket.connected) {
+                    logMessage('WebSocket is not connected', 'error');
+                    return;
+                }
+                
+                const channels = channelsInput.value.split(',').map(c => c.trim()).filter(Boolean);
+                
+                if (!channels.length) {
+                    logMessage('Please enter at least one channel name', 'error');
+                    return;
+                }
+                
+                logMessage(`Initializing channels: ${channels.join(', ')}`);
+                
+                // Create initialize payload
+                const initPayload = {
+                    event: 'initialize',
+                    auth: {
+                        token: token
+                    },
+                    payload: {
+                        channels: channels
+                    }
+                };
+                
+                // Send initialize request via REST API
+                const response = await axios.post(`${API_BASE_URL}/websocket/initialize`, initPayload);
+                
+                if (response.data && response.data.status === 'success') {
+                    logMessage(`Channels initialized: ${channels.join(', ')}`, 'success');
+                    channelStatus.innerHTML = `<p class="success">Channels initialized: ${channels.join(', ')}</p>`;
+                    broadcastBtn.disabled = false;
+                    
+                    // Update broadcast channels input
+                    broadcastChannelsInput.value = channels.join(',');
+                } else {
+                    logMessage(`Failed to initialize channels: ${response.data.message || 'Unknown error'}`, 'error');
+                    channelStatus.innerHTML = `<p class="error">Initialization failed</p>`;
+                }
+            } catch (error) {
+                logMessage(`Error initializing channels: ${error.message}`, 'error');
+                channelStatus.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+            }
+        });
+        
+        // Broadcast message to channels
+        broadcastBtn.addEventListener('click', async () => {
+            try {
+                const channels = broadcastChannelsInput.value.split(',').map(c => c.trim()).filter(Boolean);
+                
+                if (!channels.length) {
+                    logMessage('Please enter at least one channel for broadcasting', 'error');
+                    return;
+                }
+                
+                // Parse message JSON
+                let messageData;
+                try {
+                    messageData = JSON.parse(messageInput.value);
+                } catch (error) {
+                    logMessage('Invalid JSON message format', 'error');
+                    return;
+                }
+                
+                logMessage(`Broadcasting to channels: ${channels.join(', ')}`);
+                
+                // Create broadcast payload
+                const broadcastPayload = {
+                    event: 'broadcast',
+                    channel_ids: channels,
+                    payload: messageData
+                };
+                
+                // Send broadcast request
+                const response = await axios.post(`${API_BASE_URL}/websocket/broadcast`, broadcastPayload);
+                
+                if (response.data && response.data.status === 'success') {
+                    logMessage(`Message broadcasted successfully to channels: ${channels.join(', ')}`, 'success');
+                    broadcastStatus.innerHTML = `<p class="success">Message broadcasted successfully</p>`;
+                } else {
+                    logMessage(`Failed to broadcast message: ${response.data.message || 'Unknown error'}`, 'error');
+                    broadcastStatus.innerHTML = `<p class="error">Broadcasting failed</p>`;
+                }
+            } catch (error) {
+                logMessage(`Error broadcasting message: ${error.message}`, 'error');
+                broadcastStatus.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+            }
+        });
+    </script>
+</body>
+</html>

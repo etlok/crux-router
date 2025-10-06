@@ -1,0 +1,37 @@
+# Exclude node modules and build files
+node_modules
+npm-debug.log
+dist
+
+# Exclude version control
+.git
+.gitignore
+
+# Exclude local development files
+.env
+.env.local
+.env.development
+
+# Exclude logs
+logs/*
+!logs/.gitkeep
+
+# Exclude test files
+test
+coverage
+.nyc_output
+
+# Exclude Docker files (they'll be copied in anyway)
+.dockerignore
+Dockerfile*
+
+# Exclude temporary files
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Exclude documentation except for the essential ones
+*.md
+!README.md
+!DEPLOYMENT.md

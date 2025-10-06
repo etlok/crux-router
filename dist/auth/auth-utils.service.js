@@ -26,7 +26,6 @@ let AuthUtilsService = class AuthUtilsService {
             ...additionalClaims
         }, {
             secret: this.configService.get('jwt.secret'),
-            expiresIn: this.configService.get('jwt.expiresIn'),
             issuer: this.configService.get('jwt.issuer'),
             audience: this.configService.get('jwt.audience')
         });

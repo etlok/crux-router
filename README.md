@@ -14,6 +14,8 @@ Crux Web Socket is a robust event processing and workflow orchestration system t
 - **Real-time communication**: WebSocket interfaces for immediate client notifications
 - **Fault-tolerant design**: Redis-based persistence and message queue
 - **Authentication support**: Client ID validation for secure communication
+- **Dynamic middleware system**: Configure and apply middleware chains to events
+- **Event processor**: Process events through middleware based on JSON configuration
 
 ## System Components
 
@@ -27,6 +29,8 @@ Crux Web Socket is a robust event processing and workflow orchestration system t
 
 - **Router Service**: Routes events to appropriate workflows
 - **Redis Service**: Handles data persistence and pub/sub communication
+- **Middleware System**: Dynamically loads and applies middleware based on configuration
+- **Event Processor**: Processes events through configured middleware chains
 
 ### Worker System
 

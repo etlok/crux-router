@@ -18,9 +18,11 @@ let ClientAuthService = ClientAuthService_1 = class ClientAuthService {
     redisService;
     jwtService;
     logger = new common_1.Logger(ClientAuthService_1.name);
+    SAMPLE_TEST_TOKEN;
     constructor(redisService, jwtService) {
         this.redisService = redisService;
         this.jwtService = jwtService;
+        this.SAMPLE_TEST_TOKEN = this.generateSampleTestToken();
     }
     async validateToken(token) {
         try {
@@ -52,6 +54,23 @@ let ClientAuthService = ClientAuthService_1 = class ClientAuthService {
         catch (error) {
             this.logger.error(`Failed to revoke token: ${error.message}`);
         }
+    }
+    generateSampleTestToken() {
+        const payload = {
+            sub: 'test-user-123',
+            name: 'Test User',
+            role: 'tester',
+            permissions: ['read', 'write']
+        };
+        return this.jwtService.sign(payload, { expiresIn: '365d' });
+    }
+    getSampleTestToken() {
+        return this.SAMPLE_TEST_TOKEN;
+    }
+    getSampleTestTokenWithInfo() {
+        const token = this.SAMPLE_TEST_TOKEN;
+        const payload = this.jwtService.decode(token);
+        return { token, payload };
     }
 };
 exports.ClientAuthService = ClientAuthService;

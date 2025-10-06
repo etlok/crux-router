@@ -21,6 +21,9 @@ const websocket_module_1 = require("./sources/websocket/websocket.module");
 const router_service_1 = require("./router/router.service");
 const client_auth_service_1 = require("./sources/websocket/client-auth.service");
 const jwt_module_1 = require("./auth/jwt.module");
+const middleware_module_1 = require("./middleware/middleware.module");
+const file_parser_module_1 = require("./file-parser/file-parser.module");
+const events_module_1 = require("./events/events.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -35,6 +38,9 @@ exports.AppModule = AppModule = __decorate([
                 load: [redis_config_1.default, jwt_config_1.default],
             }),
             jwt_module_1.JwtModule,
+            middleware_module_1.MiddlewareModule,
+            file_parser_module_1.FileParserModule,
+            events_module_1.EventsModule,
             kafka_module_1.KafkaModule.register()
         ],
         controllers: [api_controller_1.ApiController],

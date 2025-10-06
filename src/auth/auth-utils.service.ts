@@ -21,7 +21,7 @@ export class AuthUtilsService {
       ...additionalClaims
     }, {
       secret: this.configService.get<string>('jwt.secret'),
-      expiresIn: this.configService.get<string>('jwt.expiresIn'),
+     // expiresIn: this.configService.get<string>('jwt.expiresIn'),
       issuer: this.configService.get<string>('jwt.issuer'),
       audience: this.configService.get<string>('jwt.audience')
     });

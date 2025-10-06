@@ -7,11 +7,17 @@ import { JwtService } from '@nestjs/jwt';
 @Injectable()
 export class ClientAuthService {
   private readonly logger = new Logger(ClientAuthService.name);
+  
+  // Sample token for testing - generated once and stays constant
+  private readonly SAMPLE_TEST_TOKEN: string;
 
   constructor(
     private readonly redisService: RedisService,
     private readonly jwtService: JwtService
-  ) {}
+  ) {
+    // Generate a sample test token during service initialization
+    this.SAMPLE_TEST_TOKEN = this.generateSampleTestToken();
+  }
   
   /**
    * Validate a JWT token
@@ -69,6 +75,42 @@ export class ClientAuthService {
     } catch (error) {
       this.logger.error(`Failed to revoke token: ${error.message}`);
     }
+  }
+
+  /**
+   * Generate a sample JWT token for testing purposes
+   * This token has a very long expiration time (1 year)
+   * @returns A sample JWT token string
+   */
+  private generateSampleTestToken(): string {
+    const payload = {
+      sub: 'test-user-123',
+      name: 'Test User',
+      role: 'tester',
+      permissions: ['read', 'write']
+      // Let the JWT module handle the iat and exp claims
+    };
+    
+    // Pass a custom expiration for this specific token
+    return this.jwtService.sign(payload, { expiresIn: '365d' });
+  }
+
+  /**
+   * Get the sample test token for client applications
+   * @returns The sample test token string
+   */
+  getSampleTestToken(): string {
+    return this.SAMPLE_TEST_TOKEN;
+  }
+
+  /**
+   * Get sample test token with payload information (for documentation)
+   * @returns Object containing token and its decoded payload
+   */
+  getSampleTestTokenWithInfo(): { token: string, payload: any } {
+    const token = this.SAMPLE_TEST_TOKEN;
+    const payload = this.jwtService.decode(token);
+    return { token, payload };
   }
 }
 

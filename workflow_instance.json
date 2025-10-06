@@ -70,6 +70,36 @@ Workflow instance sample -  Key: workflow_instance:123456
   }
 }
 
+
+
+ Step data sample - Key: step_instance:def222
+
+
+{
+  "definition": {
+    "class": "FinalizeOrderStep",
+    "type": "finalize_order",
+    "steps": []
+  },
+  "data": {
+    "config": {
+      "template": "booking_confirmation",
+      "priority": "high"
+    },
+    "metadata": {
+      "orderId": "ORD-1234567",
+      "customerId": "CUST-89101"
+    }
+  },
+  "metadata": {
+    "start_time": "",
+    "end_time": "",
+    "status": "pending"
+  }
+}
+
+
+
 Queue Sample - worker_instance:inst_1:queue
 
 {

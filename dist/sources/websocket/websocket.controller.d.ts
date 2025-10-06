@@ -57,6 +57,26 @@ export declare class WebSocketController {
         status: string;
         message: string;
     }>;
+    getSampleToken(): {
+        status: string;
+        token: string;
+        payload: any;
+        usage: {
+            headers: {
+                Authorization: string;
+            };
+            websocket_payload: {
+                auth: {
+                    token: string;
+                };
+                event: string;
+                payload: {
+                    channels: string[];
+                };
+            };
+            curl: string;
+        };
+    };
     broadcastMessage(broadcastDto: BroadcastDto): Promise<{
         status: string;
         message: string;
@@ -76,7 +96,7 @@ export declare class WebSocketController {
     };
     private validateUserCredentials;
     private getUserId;
-    initialize(initializeDto: InitializeDto): Promise<{
+    initialize(initializeDto: InitializeDto, req: any): Promise<{
         status: string;
         message: string;
         channels: {
@@ -86,7 +106,7 @@ export declare class WebSocketController {
         authenticated: boolean;
         sessionId: string;
     }>;
-    channelBroadcast(broadcastDto: ChannelBroadcastDto): Promise<{
+    channelBroadcast(broadcastDto: ChannelBroadcastDto, req: any): Promise<{
         status: string;
         message: string;
         channels: {

@@ -9,5 +9,6 @@ export declare class RouterController {
         status: string;
         workflow_instance_id: string;
         request_id: string;
+        steps: string[];
     }>;
 }
