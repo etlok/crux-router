@@ -23,6 +23,7 @@ let RedisService = RedisService_1 = class RedisService {
     connectionAttempts = 0;
     lastReconnectTime = 0;
     connectionErrors = 0;
+    clientsInitialized = false;
     constructor() {
         this.pubClient = (0, redis_1.createClient)({
             url: process.env.REDIS_URL || 'redis://localhost:6379',
@@ -206,12 +207,12 @@ let RedisService = RedisService_1 = class RedisService {
                 subClientConnected: this.subClient.isOpen,
                 reconnectionAttempts: this.connectionAttempts,
                 lastReconnectTime: this.lastReconnectTime,
-                connectionErrors: this.connectionErrors
+                connectionErrors: this.connectionErrors,
             },
             subscriptions: {
                 activeCount: this.activeSubscriptions.size,
-                channels: Array.from(this.activeSubscriptions)
-            }
+                channels: Array.from(this.activeSubscriptions),
+            },
         };
     }
     async checkConnections() {
@@ -236,6 +237,27 @@ let RedisService = RedisService_1 = class RedisService {
             this.connectionErrors++;
             this.logger.error(`Health check failed: ${err.message}`);
         }
+    }
+    async getSocketClients() {
+        if (!this.pubClient.isOpen) {
+            try {
+                await this.pubClient.connect();
+            }
+            catch (err) {
+                this.logger.error(`Error connecting Redis pub client: ${err.message}`);
+                throw err;
+            }
+        }
+        if (!this.subClient.isOpen) {
+            try {
+                await this.subClient.connect();
+            }
+            catch (err) {
+                this.logger.error(`Error connecting Redis sub client: ${err.message}`);
+                throw err;
+            }
+        }
+        return { pubClient: this.pubClient, subClient: this.subClient };
     }
 };
 exports.RedisService = RedisService;

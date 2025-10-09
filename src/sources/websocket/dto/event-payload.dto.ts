@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsObject } from "@nestjs/class-validator";
+import { IsNotEmpty, IsString, IsObject } from '@nestjs/class-validator';
 
 export class EventPayloadDto {
   @IsNotEmpty()
@@ -8,4 +8,3 @@ export class EventPayloadDto {
   @IsObject()
   payload: Record<string, any>;
 }
-

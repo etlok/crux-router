@@ -14,25 +14,38 @@ export class MiddlewareCodeController {
       }
 
       // Try to find the middleware file
-      const middlewarePath = path.join(process.cwd(), 'middleware', 'custom', `${key}.js`);
-      
+      const middlewarePath = path.join(
+        process.cwd(),
+        'middleware',
+        'custom',
+        `${key}.js`,
+      );
+
       if (fs.existsSync(middlewarePath)) {
         const code = fs.readFileSync(middlewarePath, 'utf8');
         return res.send(code);
       }
-      
+
       // Try the built-in middleware path as fallback
-      const builtinPath = path.join(process.cwd(), 'src', 'middleware', 'middlewares', `${key}.middleware.ts`);
-      
+      const builtinPath = path.join(
+        process.cwd(),
+        'src',
+        'middleware',
+        'middlewares',
+        `${key}.middleware.ts`,
+      );
+
       if (fs.existsSync(builtinPath)) {
         const code = fs.readFileSync(builtinPath, 'utf8');
         return res.send(code);
       }
-      
+
       return res.status(404).send(`Middleware '${key}' not found`);
     } catch (error) {
       console.error(`Error loading middleware code for ${key}:`, error);
-      return res.status(500).send(`Error loading middleware code: ${error.message}`);
+      return res
+        .status(500)
+        .send(`Error loading middleware code: ${error.message}`);
     }
   }
 }

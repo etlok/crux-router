@@ -22,7 +22,8 @@ let WorkerLogEmitterService = WorkerLogEmitterService_1 = class WorkerLogEmitter
             if (!this.server) {
                 return;
             }
-            if (logMessage.includes('Selected worker instance:') && logMessage.includes('with utilization:')) {
+            if (logMessage.includes('Selected worker instance:') &&
+                logMessage.includes('with utilization:')) {
                 const workerMatch = logMessage.match(/Selected worker instance: ([^ ]+) \(([^)]+)\) with utilization: ([0-9.]+)%/);
                 if (workerMatch) {
                     const workerId = workerMatch[1];
@@ -33,12 +34,13 @@ let WorkerLogEmitterService = WorkerLogEmitterService_1 = class WorkerLogEmitter
                         message: logMessage,
                         workerId,
                         workerName,
-                        utilization
+                        utilization,
                     });
                     this.logger.debug(`Emitted worker selection event: ${workerName} (${utilization}%)`);
                 }
             }
-            else if (logMessage.includes('Added step step_instance:') && logMessage.includes('to queue worker_instance:')) {
+            else if (logMessage.includes('Added step step_instance:') &&
+                logMessage.includes('to queue worker_instance:')) {
                 const stepMatch = logMessage.match(/Added step (step_instance:[a-z0-9-]+) to queue (worker_instance:[^:]+:[^:]+:[^:]+)/);
                 if (stepMatch) {
                     const stepInstanceId = stepMatch[1];
@@ -47,7 +49,7 @@ let WorkerLogEmitterService = WorkerLogEmitterService_1 = class WorkerLogEmitter
                         type: 'step_added',
                         message: logMessage,
                         stepInstanceId,
-                        workerInstanceId
+                        workerInstanceId,
                     });
                     this.logger.debug(`Emitted step added to queue event: ${stepInstanceId}`);
                 }
@@ -57,7 +59,7 @@ let WorkerLogEmitterService = WorkerLogEmitterService_1 = class WorkerLogEmitter
                 logMessage.includes('workflow:')) {
                 this.server.emit('worker_log', {
                     type: 'workflow_log',
-                    message: logMessage
+                    message: logMessage,
                 });
             }
         }

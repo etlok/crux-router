@@ -18,18 +18,18 @@ const auth_guard_1 = require("../middleware/auth.guard");
 let ProtectedController = class ProtectedController {
     publicEndpoint() {
         return {
-            message: 'This is a public endpoint that anyone can access'
+            message: 'This is a public endpoint that anyone can access',
         };
     }
     privateEndpoint() {
         return {
-            message: 'This is a protected endpoint that requires authentication'
+            message: 'This is a protected endpoint that requires authentication',
         };
     }
     userInfo(req) {
         return {
             message: 'This is your user information',
-            user: req.user
+            user: req.user,
         };
     }
 };

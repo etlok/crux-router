@@ -26,13 +26,15 @@ export class EventProcessorService {
   constructor(
     private readonly middlewareConfig: MiddlewareConfigService,
     private readonly middlewareLoader: MiddlewareLoaderService,
-    private readonly routerService: RouterService
+    private readonly routerService: RouterService,
   ) {}
 
-
-  async processEvent(eventPayload: EventPayload, sourceContext: any = {}): Promise<any> {
+  async processEvent(
+    eventPayload: EventPayload,
+    sourceContext: any = {},
+  ): Promise<any> {
     this.logger.log(`Processing event: ${eventPayload.event}`);
-    
+
     try {
       // Create the context for middleware execution - ensuring no circular references
       const context = {
@@ -40,11 +42,11 @@ export class EventProcessorService {
         eventConfig: eventPayload.config,
         sourceContext, // This should now be safe since we've removed the Socket object
         data: eventPayload,
-        result: null as any, 
+        result: null as any,
         metadata: {
           startTime: Date.now(),
           middlewareResults: {},
-        }
+        },
       };
 
       // to temporarily set active middleware to those specified in the event
@@ -53,37 +55,45 @@ export class EventProcessorService {
       // to execute middleware chain
       await this.middlewareLoader.executeMiddlewareChain(context);
 
-      this.logger.log('Middleware execution successful!')
+      this.logger.log('Middleware execution successful!');
       // to process actions if middleware succeeds
       if (eventPayload.actions && eventPayload.actions.length > 0) {
-        context.result = await this.processActions(eventPayload.actions, context);
+        context.result = await this.processActions(
+          eventPayload.actions,
+          context,
+        );
       }
 
       this.logger.log(`Completed processing event: ${eventPayload.event}`);
-      
+
       // Sanitize result to remove any potential circular references before returning
       return this.sanitizeResult(context.result);
     } catch (error) {
-      this.logger.error(`Error processing event ${eventPayload.event}: ${error.message}`);
+      this.logger.error(
+        `Error processing event ${eventPayload.event}: ${error.message}`,
+      );
       throw error;
     }
   }
 
-
-  private async processActions(actions: EventAction[], context: any): Promise<any[]> {
+  private async processActions(
+    actions: EventAction[],
+    context: any,
+  ): Promise<any[]> {
     const results: any[] = [];
 
     for (const action of actions) {
       try {
         this.logger.log(`Executing action: ${action.type}`);
-        
-              const result = await this.routerService.routeEvent(action.workflow);
 
-              results.push(result);
+        const result = await this.routerService.routeEvent(action.workflow);
 
+        results.push(result);
       } catch (error) {
-        this.logger.error(`Error executing action ${action.type}: ${error.message}`);
-        throw error; 
+        this.logger.error(
+          `Error executing action ${action.type}: ${error.message}`,
+        );
+        throw error;
       }
     }
 
@@ -96,44 +106,46 @@ export class EventProcessorService {
    */
   private sanitizeResult(result: any): any {
     if (!result) return result;
-    
+
     try {
       // Use this approach to catch circular references
       const seen = new WeakSet();
-      return JSON.parse(JSON.stringify(result, (key, value) => {
-        // Skip functions and undefined values
-        if (typeof value === 'function' || typeof value === 'undefined') {
-          return undefined;
-        }
-        
-        // Handle circular references
-        if (typeof value === 'object' && value !== null) {
-          if (seen.has(value)) {
-            return '[Circular Reference]';
+      return JSON.parse(
+        JSON.stringify(result, (key, value) => {
+          // Skip functions and undefined values
+          if (typeof value === 'function' || typeof value === 'undefined') {
+            return undefined;
           }
-          seen.add(value);
-        }
-        return value;
-      }));
+
+          // Handle circular references
+          if (typeof value === 'object' && value !== null) {
+            if (seen.has(value)) {
+              return '[Circular Reference]';
+            }
+            seen.add(value);
+          }
+          return value;
+        }),
+      );
     } catch (error) {
       this.logger.error(`Error sanitizing result: ${error.message}`);
       // Return a safe version without detailed data if we encounter an error
       if (Array.isArray(result)) {
-        return result.map(item => this.createSafeObject(item));
+        return result.map((item) => this.createSafeObject(item));
       } else {
         return this.createSafeObject(result);
       }
     }
   }
-  
+
   /**
    * Create a safe object with only primitive types
    */
   private createSafeObject(obj: any): any {
     if (!obj || typeof obj !== 'object') return obj;
-    
+
     const safeObj: Record<string, any> = {};
-    
+
     // Extract only primitive values and simple objects
     for (const key in obj) {
       if (Object.prototype.hasOwnProperty.call(obj, key)) {
@@ -151,7 +163,7 @@ export class EventProcessorService {
         }
       }
     }
-    
+
     return safeObj;
   }
 }

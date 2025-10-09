@@ -10,6 +10,7 @@ export declare class RedisService implements OnModuleDestroy {
     private connectionAttempts;
     private lastReconnectTime;
     private connectionErrors;
+    private clientsInitialized;
     constructor();
     private connectClients;
     subscribe(channel: string, callback: (message: string) => void): Promise<void>;
@@ -42,4 +43,8 @@ export declare class RedisService implements OnModuleDestroy {
         };
     };
     private checkConnections;
+    getSocketClients(): Promise<{
+        pubClient: RedisClientType;
+        subClient: RedisClientType;
+    }>;
 }

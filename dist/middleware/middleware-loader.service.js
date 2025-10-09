@@ -30,7 +30,7 @@ let MiddlewareLoaderService = MiddlewareLoaderService_1 = class MiddlewareLoader
             name: key,
             priority,
             enabled: true,
-            middlewareInstance
+            middlewareInstance,
         });
         this.logger.log(`Manually registered middleware: ${key} (priority: ${priority})`);
     }
@@ -39,11 +39,12 @@ let MiddlewareLoaderService = MiddlewareLoaderService_1 = class MiddlewareLoader
             execute: async (context, next) => {
                 this.logger.log('Fallback authentication middleware executed');
                 if (context.sourceContext?.client) {
-                    context.sourceContext.client.data = context.sourceContext.client.data || {};
+                    context.sourceContext.client.data =
+                        context.sourceContext.client.data || {};
                     context.sourceContext.client.data.isAuthenticated = true;
                 }
                 await next();
-            }
+            },
         }, 10);
         this.registerMiddleware('logging', {
             execute: async (context, next) => {
@@ -52,13 +53,13 @@ let MiddlewareLoaderService = MiddlewareLoaderService_1 = class MiddlewareLoader
                 await next();
                 const duration = Date.now() - startTime;
                 this.logger.log(`Event ${context.event || 'unknown'} processed in ${duration}ms`);
-            }
+            },
         }, 20);
         this.registerMiddleware('validation', {
             execute: async (context, next) => {
                 this.logger.log('Fallback validation middleware executed');
                 await next();
-            }
+            },
         }, 30);
         this.registerMiddleware('error-handling', {
             execute: async (context, next) => {
@@ -69,7 +70,7 @@ let MiddlewareLoaderService = MiddlewareLoaderService_1 = class MiddlewareLoader
                     this.logger.error(`Fallback error-handling middleware caught error: ${error.message}`);
                     context.error = error;
                 }
-            }
+            },
         }, 999);
     }
     async initializeMiddleware(middlewarePath = path.join(__dirname, 'middlewares')) {
@@ -79,7 +80,7 @@ let MiddlewareLoaderService = MiddlewareLoaderService_1 = class MiddlewareLoader
         this.registerFallbackMiddleware();
         try {
             const configs = await this.middlewareConfigService.getAllConfigs();
-            const classConfigs = configs.filter(c => c.type === 'class');
+            const classConfigs = configs.filter((c) => c.type === 'class');
             this.logger.log(`Found ${classConfigs.length} middleware configurations`);
             this.middlewares = [];
             for (const config of classConfigs) {
@@ -95,7 +96,8 @@ let MiddlewareLoaderService = MiddlewareLoaderService_1 = class MiddlewareLoader
                                     console.log(`[${middlewareName}] Executing middleware for event: ${context.event || 'unknown'}`);
                                     if (middlewareName === 'authentication') {
                                         if (context.sourceContext?.client) {
-                                            context.sourceContext.client.data = context.sourceContext.client.data || {};
+                                            context.sourceContext.client.data =
+                                                context.sourceContext.client.data || {};
                                             context.sourceContext.client.data.isAuthenticated = true;
                                         }
                                     }
@@ -127,7 +129,7 @@ let MiddlewareLoaderService = MiddlewareLoaderService_1 = class MiddlewareLoader
                                     }
                                     await next();
                                 }
-                            }
+                            },
                         };
                     };
                     try {
@@ -157,23 +159,27 @@ let MiddlewareLoaderService = MiddlewareLoaderService_1 = class MiddlewareLoader
                     }
                     let middlewareInstance;
                     try {
-                        middlewareInstance = this.moduleRef.get(middlewareClass, { strict: false });
+                        middlewareInstance = this.moduleRef.get(middlewareClass, {
+                            strict: false,
+                        });
                     }
                     catch {
                         middlewareInstance = new middlewareClass();
                     }
-                    if (!middlewareInstance.execute || typeof middlewareInstance.execute !== 'function') {
+                    if (!middlewareInstance.execute ||
+                        typeof middlewareInstance.execute !== 'function') {
                         this.logger.warn(`Middleware ${middlewareClass.name} does not have an execute method`);
                         continue;
                     }
                     const priority = Reflect.getMetadata('middleware:priority', middlewareClass) || 100;
-                    const enabled = Reflect.getMetadata('middleware:enabled', middlewareClass) !== false;
+                    const enabled = Reflect.getMetadata('middleware:enabled', middlewareClass) !==
+                        false;
                     const name = config.key;
                     this.middlewares.push({
                         name,
                         priority,
                         enabled,
-                        middlewareInstance
+                        middlewareInstance,
                     });
                     this.logger.log(`Loaded middleware: ${name} (priority: ${priority}, enabled: ${enabled})`);
                 }
@@ -203,10 +209,10 @@ let MiddlewareLoaderService = MiddlewareLoaderService_1 = class MiddlewareLoader
             return this.executeDefaultMiddlewareChain(context);
         }
         const resolvedKeys = await this.resolveMiddlewareKeys(keys);
-        let enabledMiddlewares = this.middlewares.filter(m => m.enabled && resolvedKeys.includes(m.name));
+        let enabledMiddlewares = this.middlewares.filter((m) => m.enabled && resolvedKeys.includes(m.name));
         if (enabledMiddlewares.length === 0) {
             this.logger.warn('No matching enabled middleware found, using fallbacks');
-            enabledMiddlewares = this.middlewares.filter(m => m.enabled);
+            enabledMiddlewares = this.middlewares.filter((m) => m.enabled);
         }
         this.logger.log(`Executing middleware chain with ${enabledMiddlewares.length} active middlewares`);
         let index = 0;
@@ -228,7 +234,7 @@ let MiddlewareLoaderService = MiddlewareLoaderService_1 = class MiddlewareLoader
     }
     async executeDefaultMiddlewareChain(context) {
         this.logger.log('Executing default middleware chain');
-        const defaultMiddlewares = this.middlewares.filter(m => m.enabled && ['logging', 'authentication'].includes(m.name));
+        const defaultMiddlewares = this.middlewares.filter((m) => m.enabled && ['logging', 'authentication'].includes(m.name));
         if (defaultMiddlewares.length === 0) {
             this.logger.warn('No default middleware available, execution will continue without middleware');
             return;
@@ -252,7 +258,7 @@ let MiddlewareLoaderService = MiddlewareLoaderService_1 = class MiddlewareLoader
         return [...this.middlewares];
     }
     setMiddlewareState(name, enabled) {
-        const middleware = this.middlewares.find(m => m.name === name);
+        const middleware = this.middlewares.find((m) => m.name === name);
         if (middleware) {
             middleware.enabled = enabled;
             return true;

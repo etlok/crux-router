@@ -31,7 +31,7 @@ exports.JwtModule = JwtModule = __decorate([
                     verifyOptions: {
                         issuer: configService.get('jwt.issuer'),
                         audience: configService.get('jwt.audience'),
-                    }
+                    },
                 }),
                 inject: [config_1.ConfigService],
             }),

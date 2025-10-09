@@ -19,7 +19,7 @@ import jwtConfig from '../config/jwt.config';
         verifyOptions: {
           issuer: configService.get('jwt.issuer'),
           audience: configService.get('jwt.audience'),
-        }
+        },
       }),
       inject: [ConfigService],
     }),

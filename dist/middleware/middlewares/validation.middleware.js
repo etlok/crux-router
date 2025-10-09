@@ -13,18 +13,18 @@ const base_middleware_1 = require("../base.middleware");
 let ValidationMiddleware = ValidationMiddleware_1 = class ValidationMiddleware extends base_middleware_1.BaseMiddleware {
     logger = new common_1.Logger(ValidationMiddleware_1.name);
     schemas = {
-        'ping': {
+        ping: {
             required: ['timestamp'],
-            validate: (data) => typeof data.timestamp === 'number'
+            validate: (data) => typeof data.timestamp === 'number',
         },
-        'authenticate': {
+        authenticate: {
             required: ['token'],
-            validate: (data) => typeof data.token === 'string' && data.token.length > 0
+            validate: (data) => typeof data.token === 'string' && data.token.length > 0,
         },
-        'protected': {
+        protected: {
             required: ['data'],
-            validate: (data) => typeof data.data === 'string'
-        }
+            validate: (data) => typeof data.data === 'string',
+        },
     };
     async execute(context, next) {
         const { client, event, data } = context;
@@ -50,7 +50,7 @@ let ValidationMiddleware = ValidationMiddleware_1 = class ValidationMiddleware e
                 this.logger.warn(`Validation error for ${event}: ${errorMessage}`);
                 client.emit('error', {
                     code: 'VALIDATION_ERROR',
-                    message: errorMessage
+                    message: errorMessage,
                 });
                 context.metadata.validationError = errorMessage;
                 context.metadata.isValid = false;

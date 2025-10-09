@@ -65,22 +65,24 @@ let KafkaService = KafkaService_1 = class KafkaService {
         }
     }
     async handleFailedMessage(message, error) {
-        const messageId = message.key?.toString() ||
-            `${message.timestamp}-${message.offset}`;
+        const messageId = message.key?.toString() || `${message.timestamp}-${message.offset}`;
         const retryCount = this.messageRetryCount.get(messageId) || 0;
         if (retryCount >= this.MAX_RETRY_ATTEMPTS) {
             try {
                 await this.producer.send({
-                    topic: this.configService.get('app.kafka.deadLetterTopic') || 'dead-letter-queue',
-                    messages: [{
+                    topic: this.configService.get('app.kafka.deadLetterTopic') ||
+                        'dead-letter-queue',
+                    messages: [
+                        {
                             key: message.key,
                             value: JSON.stringify({
                                 originalMessage: message.value?.toString(),
                                 error: error.message,
                                 processingAttempts: retryCount + 1,
-                                timestamp: new Date().toISOString()
-                            })
-                        }]
+                                timestamp: new Date().toISOString(),
+                            }),
+                        },
+                    ],
                 });
                 this.logger.warn(`Message sent to dead letter queue after ${retryCount + 1} attempts: ${messageId}`, KafkaService_1.name);
                 this.messageRetryCount.delete(messageId);
@@ -97,7 +99,7 @@ let KafkaService = KafkaService_1 = class KafkaService {
     async subscribeAndRun() {
         await this.consumer.subscribe({
             topics: ['event-topic'],
-            fromBeginning: false
+            fromBeginning: false,
         });
         await this.consumer.run({
             eachMessage: async ({ topic, partition, message }) => {
@@ -127,7 +129,11 @@ let KafkaService = KafkaService_1 = class KafkaService {
         this.logger.log(`Sending message to topic ${topic}: ${JSON.stringify(message)}`);
         await this.producer.send({
             topic,
-            messages: [{ value: typeof message === 'string' ? message : JSON.stringify(message) }],
+            messages: [
+                {
+                    value: typeof message === 'string' ? message : JSON.stringify(message),
+                },
+            ],
         });
     }
     async onModuleDestroy() {

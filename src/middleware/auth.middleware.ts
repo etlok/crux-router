@@ -1,4 +1,9 @@
-import { Injectable, NestMiddleware, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  NestMiddleware,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { JwtService } from '@nestjs/jwt';
 import { RedisService } from 'src/redis/redis.service';
@@ -13,7 +18,7 @@ export class AuthMiddleware implements NestMiddleware {
 
   constructor(
     private readonly jwtService: JwtService,
-    private readonly redisService: RedisService
+    private readonly redisService: RedisService,
   ) {}
 
   /**
@@ -22,7 +27,7 @@ export class AuthMiddleware implements NestMiddleware {
   async use(req: Request, res: Response, next: NextFunction) {
     try {
       const token = this.extractTokenFromHeader(req);
-      
+
       // If no token is present, allow the request to continue
       // This allows public endpoints to work without authentication
       if (!token) {
@@ -33,12 +38,11 @@ export class AuthMiddleware implements NestMiddleware {
       // Verify the JWT token
       try {
         const payload = await this.verifyToken(token);
-        
+
         // Set the user object in the request for later use in controllers
         req['user'] = payload;
         req['isAuthenticated'] = true;
         req['token'] = token;
-        
       } catch (error) {
         // Token validation failed, but we'll still allow the request to continue
         // Controllers can check req.isAuthenticated to enforce authentication when needed
@@ -65,12 +69,12 @@ export class AuthMiddleware implements NestMiddleware {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       return authHeader.substring(7); // Remove "Bearer " prefix
     }
-    
+
     // Check for token in the query parameters
     if (req.query && req.query.token) {
       return req.query.token as string;
     }
-    
+
     // Check for token in request body
     if (req.body && req.body.auth && req.body.auth.token) {
       return req.body.auth.token;
@@ -80,7 +84,7 @@ export class AuthMiddleware implements NestMiddleware {
     if (req.cookies && req.cookies.token) {
       return req.cookies.token;
     }
-    
+
     return null;
   }
 
@@ -90,13 +94,13 @@ export class AuthMiddleware implements NestMiddleware {
   private async verifyToken(token: string): Promise<any> {
     // First verify the token signature
     const payload = this.jwtService.verify(token);
-    
+
     // Then check if the token has been revoked in Redis
     const isRevoked = await this.redisService.get(`revoked_token:${token}`);
     if (isRevoked) {
       throw new UnauthorizedException('Token has been revoked');
     }
-    
+
     return payload;
   }
 }

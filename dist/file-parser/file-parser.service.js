@@ -35,16 +35,18 @@ let FileParserService = FileParserService_1 = class FileParserService {
             if (!Array.isArray(jsonData)) {
                 throw new common_1.BadRequestException('JSON content must be an array of events');
             }
-            const events = jsonData.map(event => {
+            const events = jsonData.map((event) => {
                 const eventObj = (0, class_transformer_1.plainToClass)(event_dto_1.EventDto, event);
                 const errors = (0, class_validator_1.validateSync)(eventObj, {
                     whitelist: true,
                     forbidNonWhitelisted: true,
-                    forbidUnknownValues: true
+                    forbidUnknownValues: true,
                 });
                 if (errors.length > 0) {
-                    const messages = errors.map(error => {
-                        const constraints = error.constraints ? Object.values(error.constraints) : ['Invalid value'];
+                    const messages = errors.map((error) => {
+                        const constraints = error.constraints
+                            ? Object.values(error.constraints)
+                            : ['Invalid value'];
                         return `${error.property}: ${constraints.join(', ')}`;
                     });
                     throw new common_1.BadRequestException(`Validation failed: ${messages.join('; ')}`);

@@ -16,13 +16,15 @@ export abstract class BaseMiddleware {
  * Middleware decorator for setting priority
  * Lower priority values execute first
  */
-export function Middleware(options: { priority?: number, enabled?: boolean } = {}): ClassDecorator {
+export function Middleware(
+  options: { priority?: number; enabled?: boolean } = {},
+): ClassDecorator {
   return (target: any) => {
     const { priority = 100, enabled = true } = options;
-    
+
     Reflect.defineMetadata('middleware:priority', priority, target);
     Reflect.defineMetadata('middleware:enabled', enabled, target);
-    
+
     return target;
   };
 }

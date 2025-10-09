@@ -13,7 +13,6 @@ const redis_service_1 = require("../../redis/redis.service");
 const router_service_1 = require("../../router/router.service");
 const client_auth_service_1 = require("./client-auth.service");
 const websocket_controller_1 = require("./websocket.controller");
-const ws_auth_middleware_1 = require("../../middleware/ws-auth.middleware");
 const middleware_module_1 = require("../../middleware/middleware.module");
 const events_module_1 = require("../../events/events.module");
 let WebsocketModule = class WebsocketModule {
@@ -23,14 +22,13 @@ exports.WebsocketModule = WebsocketModule = __decorate([
     (0, common_1.Module)({
         imports: [
             middleware_module_1.MiddlewareModule,
-            events_module_1.EventsModule
+            events_module_1.EventsModule,
         ],
         providers: [
             websocket_gateway_1.WSGateway,
             redis_service_1.RedisService,
             router_service_1.RouterService,
             client_auth_service_1.ClientAuthService,
-            ws_auth_middleware_1.WsAuthMiddleware
         ],
         controllers: [websocket_controller_1.WebSocketController],
         exports: [websocket_gateway_1.WSGateway],

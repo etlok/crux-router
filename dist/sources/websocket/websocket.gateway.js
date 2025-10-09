@@ -22,7 +22,6 @@ const common_1 = require("@nestjs/common");
 const event_payload_dto_1 = require("./dto/event-payload.dto");
 const uuid_1 = require("uuid");
 const client_auth_service_1 = require("./client-auth.service");
-const ws_auth_middleware_1 = require("../../middleware/ws-auth.middleware");
 const dynamic_ws_middleware_interceptor_1 = require("../../middleware/dynamic-ws-middleware.interceptor");
 const event_processor_service_1 = require("../../events/event-processor.service");
 const worker_log_emitter_service_1 = require("../../events/worker-log-emitter.service");
@@ -30,7 +29,6 @@ let WSGateway = WSGateway_1 = class WSGateway {
     redisService;
     routerService;
     clientAuthService;
-    wsAuthMiddleware;
     eventProcessorService;
     workerLogEmitterService;
     server;
@@ -42,11 +40,10 @@ let WSGateway = WSGateway_1 = class WSGateway {
     RATE_WINDOW = 60000;
     connectedClients = new Set();
     authenticatedClients = new Set();
-    constructor(redisService, routerService, clientAuthService, wsAuthMiddleware, eventProcessorService, workerLogEmitterService) {
+    constructor(redisService, routerService, clientAuthService, eventProcessorService, workerLogEmitterService) {
         this.redisService = redisService;
         this.routerService = routerService;
         this.clientAuthService = clientAuthService;
-        this.wsAuthMiddleware = wsAuthMiddleware;
         this.eventProcessorService = eventProcessorService;
         this.workerLogEmitterService = workerLogEmitterService;
     }
@@ -65,7 +62,9 @@ let WSGateway = WSGateway_1 = class WSGateway {
                         this.server.to(response.room).emit('outgoing_event', response);
                     }
                     else if (response.clientId) {
-                        this.server.to(response.clientId).emit('outgoing_event', response);
+                        this.server
+                            .to(response.clientId)
+                            .emit('outgoing_event', response);
                     }
                     else {
                         this.server.emit('outgoing_event', response);
@@ -89,22 +88,12 @@ let WSGateway = WSGateway_1 = class WSGateway {
     async handleConnection(client) {
         this.logger.log(`Client connected: ${client.id}`);
         this.connectedClients.add(client.id);
-        const user = await this.wsAuthMiddleware.authenticate(client);
-        if (user) {
-            this.authenticatedClients.add(client.id);
-            this.logger.log(`Client authenticated: ${client.id} (${user.sub || user.id || 'unknown'})`);
-            if (user.sub) {
-                client.join(`user:${user.sub}`);
+        this.logger.log(`Client not authenticated on connection: ${client.id}`);
+        setTimeout(() => {
+            if (client.connected && !this.authenticatedClients.has(client.id)) {
+                this.logger.warn(`Client ${client.id} still not authenticated after grace period, but allowing connection`);
             }
-        }
-        else {
-            this.logger.log(`Client not authenticated on connection: ${client.id}`);
-            setTimeout(() => {
-                if (client.connected && !this.authenticatedClients.has(client.id)) {
-                    this.logger.warn(`Client ${client.id} still not authenticated after grace period, but allowing connection`);
-                }
-            }, 60000);
-        }
+        }, 60000);
         this.logger.log(`Client connected: ${client.id}, total: ${this.connectedClients.size}`);
     }
     handleDisconnect(client) {
@@ -123,19 +112,13 @@ let WSGateway = WSGateway_1 = class WSGateway {
         }
         try {
             client.handshake.auth.token = data.token;
-            const user = await this.wsAuthMiddleware.authenticate(client);
             if (!this.authenticatedClients.has(client.id)) {
                 this.authenticatedClients.add(client.id);
             }
-            this.logger.log(`Client authenticated via message: ${client.id}, user: ${user.sub || user.id || 'unknown'}`);
+            ;
             return {
                 status: 'success',
                 message: 'Authentication successful',
-                user: {
-                    id: user.sub || user.id,
-                    roles: user.roles || [],
-                    name: user.name
-                }
             };
         }
         catch (err) {
@@ -143,7 +126,7 @@ let WSGateway = WSGateway_1 = class WSGateway {
             return {
                 status: 'error',
                 message: 'Invalid token',
-                code: 'INVALID_TOKEN'
+                code: 'INVALID_TOKEN',
             };
         }
     }
@@ -155,7 +138,7 @@ let WSGateway = WSGateway_1 = class WSGateway {
                 status: 'error',
                 code: 'UNAUTHORIZED',
                 message: 'Authentication required. Please authenticate first.',
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
             };
         }
         const now = Date.now();
@@ -166,7 +149,10 @@ let WSGateway = WSGateway_1 = class WSGateway {
         }
         else if (limit.count >= this.RATE_LIMIT) {
             this.logger.warn(`Rate limit exceeded for client ${clientId}`);
-            return { status: 'error', message: 'Rate limit exceeded. Try again later.' };
+            return {
+                status: 'error',
+                message: 'Rate limit exceeded. Try again later.',
+            };
         }
         else {
             limit.count++;
@@ -183,8 +169,8 @@ let WSGateway = WSGateway_1 = class WSGateway {
                     userId: client.data.user?.sub || client.data.user?.id,
                     socketId: client.id,
                     roles: client.data.user?.roles || [],
-                    token: client.data.token
-                }
+                    token: client.data.token,
+                },
             };
             const requestId = (0, uuid_1.v4)();
             this.logger.log(`[${requestId}] Received WebSocket event: ${event}`);
@@ -193,7 +179,7 @@ let WSGateway = WSGateway_1 = class WSGateway {
                 status: 'success',
                 requestId,
                 timestamp: new Date().toISOString(),
-                data: result
+                data: result,
             };
         }
         catch (err) {
@@ -202,7 +188,7 @@ let WSGateway = WSGateway_1 = class WSGateway {
                 status: 'error',
                 code: err.code || 'INTERNAL_ERROR',
                 message: err.message || 'An unexpected error occurred',
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
             };
         }
     }
@@ -217,7 +203,10 @@ let WSGateway = WSGateway_1 = class WSGateway {
         }
         else if (limit.count >= this.RATE_LIMIT) {
             this.logger.warn(`Rate limit exceeded for client ${clientId}`);
-            return { status: 'error', message: 'Rate limit exceeded. Try again later.' };
+            return {
+                status: 'error',
+                message: 'Rate limit exceeded. Try again later.',
+            };
         }
         else {
             limit.count++;
@@ -237,14 +226,14 @@ let WSGateway = WSGateway_1 = class WSGateway {
                 userId: client.data?.user?.sub || client.data?.user?.id,
                 userInfo: client.data?.user,
                 isAuthenticated: this.authenticatedClients.has(client.id),
-                clientData: client.data
+                clientData: client.data,
             };
             const result = await this.eventProcessorService.processEvent(data, sourceContext);
             return {
                 status: 'success',
                 requestId: (0, uuid_1.v4)(),
                 timestamp: new Date().toISOString(),
-                data: result
+                data: result,
             };
         }
         catch (err) {
@@ -253,7 +242,7 @@ let WSGateway = WSGateway_1 = class WSGateway {
                 status: 'error',
                 code: err.code || 'INTERNAL_ERROR',
                 message: err.message || 'An unexpected error occurred',
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
             };
         }
     }
@@ -264,7 +253,7 @@ let WSGateway = WSGateway_1 = class WSGateway {
             timestamp: Date.now(),
             clientId: client.id,
             isAuthenticated: this.authenticatedClients.has(client.id),
-            receivedData: data
+            receivedData: data,
         };
     }
     async getTestToken() {
@@ -274,14 +263,14 @@ let WSGateway = WSGateway_1 = class WSGateway {
                 status: 'success',
                 token: tokenInfo.token,
                 expiresAt: new Date(tokenInfo.payload.exp * 1000).toISOString(),
-                payload: tokenInfo.payload
+                payload: tokenInfo.payload,
             };
         }
         catch (error) {
             this.logger.error(`Failed to generate test token: ${error.message}`);
             return {
                 status: 'error',
-                message: 'Failed to generate test token'
+                message: 'Failed to generate test token',
             };
         }
     }
@@ -299,24 +288,24 @@ let WSGateway = WSGateway_1 = class WSGateway {
             return { status: 'error', message: 'No channels specified' };
         }
         if (clientIds && clientIds.length > 0) {
-            clientIds.forEach(clientId => {
-                channels.forEach(channel => {
+            clientIds.forEach((clientId) => {
+                channels.forEach((channel) => {
                     this.server.in(clientId).socketsJoin(channel);
                 });
                 this.logger.log(`Joined client ${clientId} to channels: ${channels.join(', ')}`);
             });
         }
         else {
-            channels.forEach(channel => {
+            channels.forEach((channel) => {
                 this.server.sockets.socketsJoin(channel);
             });
             this.logger.log(`Joined all clients to channels: ${channels.join(', ')}`);
         }
         return {
             status: 'success',
-            message: clientIds ?
-                `Joined ${clientIds.length} clients to ${channels.length} channels` :
-                `Joined all clients to ${channels.length} channels`
+            message: clientIds
+                ? `Joined ${clientIds.length} clients to ${channels.length} channels`
+                : `Joined all clients to ${channels.length} channels`,
         };
     }
     handleIncomingEvent(event) {
@@ -348,7 +337,8 @@ __decorate([
     __param(0, (0, websockets_1.MessageBody)()),
     __param(1, (0, websockets_1.ConnectedSocket)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [event_payload_dto_1.EventPayloadDto, socket_io_1.Socket]),
+    __metadata("design:paramtypes", [event_payload_dto_1.EventPayloadDto,
+        socket_io_1.Socket]),
     __metadata("design:returntype", Promise)
 ], WSGateway.prototype, "handleEvent", null);
 __decorate([
@@ -387,7 +377,6 @@ exports.WSGateway = WSGateway = WSGateway_1 = __decorate([
     __metadata("design:paramtypes", [redis_service_1.RedisService,
         router_service_1.RouterService,
         client_auth_service_1.ClientAuthService,
-        ws_auth_middleware_1.WsAuthMiddleware,
         event_processor_service_1.EventProcessorService,
         worker_log_emitter_service_1.WorkerLogEmitterService])
 ], WSGateway);

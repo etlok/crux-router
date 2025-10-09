@@ -15,7 +15,7 @@ let ErrorHandlingMiddleware = ErrorHandlingMiddleware_1 = class ErrorHandlingMid
     async execute(context, next) {
         try {
             context.metadata.errorHandling = {
-                started: Date.now()
+                started: Date.now(),
             };
             await next();
             context.metadata.errorHandling.status = 'success';
@@ -31,14 +31,14 @@ let ErrorHandlingMiddleware = ErrorHandlingMiddleware_1 = class ErrorHandlingMid
                 code: error.code || 'INTERNAL_ERROR',
                 message: error.message || 'An unexpected error occurred',
                 timestamp: new Date().toISOString(),
-                requestId: this.generateRequestId()
+                requestId: this.generateRequestId(),
             };
             context.client.emit('error', errorResponse);
             this.logger.debug(`Error details: ${JSON.stringify({
                 event: context.event,
                 clientId: context.client.id,
                 error: errorResponse,
-                data: context.data
+                data: context.data,
             }, null, 2)}`);
         }
     }

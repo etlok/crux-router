@@ -34,14 +34,14 @@ let FileParserController = class FileParserController {
             console.log(events);
             return {
                 success: true,
-                events
+                events,
             };
         }
         catch (error) {
             console.log(error.message);
             return {
                 success: false,
-                message: error.message
+                message: error.message,
             };
         }
     }
@@ -50,13 +50,13 @@ let FileParserController = class FileParserController {
             const events = await this.fileParserService.loadSampleFile();
             return {
                 success: true,
-                events
+                events,
             };
         }
         catch (error) {
             return {
                 success: false,
-                message: error.message
+                message: error.message,
             };
         }
     }
@@ -80,7 +80,7 @@ let FileParserController = class FileParserController {
             }
             return {
                 success: true,
-                events
+                events,
             };
         }
         catch (error) {
@@ -92,7 +92,7 @@ let FileParserController = class FileParserController {
             }
             return {
                 success: false,
-                message: error.message
+                message: error.message,
             };
         }
     }
@@ -123,7 +123,8 @@ __decorate([
             },
         }),
         fileFilter: (req, file, callback) => {
-            if (file.mimetype !== 'application/json' && !file.originalname.endsWith('.json')) {
+            if (file.mimetype !== 'application/json' &&
+                !file.originalname.endsWith('.json')) {
                 return callback(new common_1.BadRequestException('Only JSON files are allowed'), false);
             }
             callback(null, true);

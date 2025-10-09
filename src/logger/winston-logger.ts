@@ -6,7 +6,9 @@ export const winstonLoggerOptions = {
     new winston.transports.Console({
       format: winston.format.combine(
         winston.format.timestamp(),
-        nestWinstonModuleUtilities.format.nestLike('App', { prettyPrint: true }),
+        nestWinstonModuleUtilities.format.nestLike('App', {
+          prettyPrint: true,
+        }),
       ),
     }),
     new winston.transports.File({

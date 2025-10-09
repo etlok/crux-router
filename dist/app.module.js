@@ -41,7 +41,7 @@ exports.AppModule = AppModule = __decorate([
             middleware_module_1.MiddlewareModule,
             file_parser_module_1.FileParserModule,
             events_module_1.EventsModule,
-            kafka_module_1.KafkaModule.register()
+            kafka_module_1.KafkaModule.register(),
         ],
         controllers: [api_controller_1.ApiController],
         providers: [websocket_gateway_1.WSGateway, redis_service_1.RedisService, router_service_1.RouterService, client_auth_service_1.ClientAuthService],

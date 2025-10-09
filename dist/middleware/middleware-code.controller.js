@@ -36,7 +36,9 @@ let MiddlewareCodeController = class MiddlewareCodeController {
         }
         catch (error) {
             console.error(`Error loading middleware code for ${key}:`, error);
-            return res.status(500).send(`Error loading middleware code: ${error.message}`);
+            return res
+                .status(500)
+                .send(`Error loading middleware code: ${error.message}`);
         }
     }
 };

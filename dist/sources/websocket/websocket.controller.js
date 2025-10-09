@@ -73,15 +73,15 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
             await this.redisService.set(`user_token:${userId}:${token.substring(0, 20)}`, JSON.stringify({
                 created: new Date().toISOString(),
                 username: loginDto.username,
-                active: true
+                active: true,
             }), 60 * 60 * 24 * 7);
             return {
                 status: 'success',
                 token,
                 user: {
                     id: userId,
-                    username: loginDto.username
-                }
+                    username: loginDto.username,
+                },
             };
         }
         catch (error) {
@@ -98,7 +98,7 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
             return {
                 status: 'success',
                 valid: true,
-                payload
+                payload,
             };
         }
         catch (error) {
@@ -106,7 +106,7 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
             return {
                 status: 'error',
                 valid: false,
-                message: error.message
+                message: error.message,
             };
         }
     }
@@ -118,7 +118,7 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
             await this.clientAuthService.revokeToken(tokenDto.token);
             return {
                 status: 'success',
-                message: 'Token revoked successfully'
+                message: 'Token revoked successfully',
             };
         }
         catch (error) {
@@ -135,19 +135,19 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
                 payload: tokenInfo.payload,
                 usage: {
                     headers: {
-                        'Authorization': `Bearer ${tokenInfo.token}`
+                        Authorization: `Bearer ${tokenInfo.token}`,
                     },
                     websocket_payload: {
                         auth: {
-                            token: tokenInfo.token
+                            token: tokenInfo.token,
                         },
-                        event: "initialize",
+                        event: 'initialize',
                         payload: {
-                            channels: ["channel1", "channel2"]
-                        }
+                            channels: ['channel1', 'channel2'],
+                        },
                     },
-                    curl: `curl -X POST http://localhost:3000/websocket/initialize -H "Content-Type: application/json" -d '{"auth":{"token":"${tokenInfo.token}"},"event":"initialize","payload":{"channels":["channel1"]}}'`
-                }
+                    curl: `curl -X POST http://localhost:3000/websocket/initialize -H "Content-Type: application/json" -d '{"auth":{"token":"${tokenInfo.token}"},"event":"initialize","payload":{"channels":["channel1"]}}'`,
+                },
             };
         }
         catch (error) {
@@ -164,33 +164,33 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
                 ...broadcastDto.data,
                 _meta: {
                     source: 'api',
-                    timestamp: new Date().toISOString()
-                }
+                    timestamp: new Date().toISOString(),
+                },
             };
             if (broadcastDto.room) {
                 this.logger.log(`Broadcasting to room ${broadcastDto.room}: ${JSON.stringify(eventData)}`);
                 this.wsGateway.server.to(broadcastDto.room).emit('outgoing_event', {
                     event: broadcastDto.event,
-                    data: eventData
+                    data: eventData,
                 });
             }
             else if (broadcastDto.clientId) {
                 this.logger.log(`Broadcasting to client ${broadcastDto.clientId}: ${JSON.stringify(eventData)}`);
                 this.wsGateway.server.to(broadcastDto.clientId).emit('outgoing_event', {
                     event: broadcastDto.event,
-                    data: eventData
+                    data: eventData,
                 });
             }
             else {
                 this.logger.log(`Broadcasting to all clients: ${JSON.stringify(eventData)}`);
                 this.wsGateway.broadcastEvent({
                     event: broadcastDto.event,
-                    data: eventData
+                    data: eventData,
                 });
             }
             return {
                 status: 'success',
-                message: 'Message broadcasted successfully'
+                message: 'Message broadcasted successfully',
             };
         }
         catch (error) {
@@ -206,8 +206,8 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
             connections: {
                 total: totalConnections,
                 authenticated: authenticatedConnections,
-                anonymous: totalConnections - authenticatedConnections
-            }
+                anonymous: totalConnections - authenticatedConnections,
+            },
         };
     }
     generateTestToken(username = 'test-user') {
@@ -216,12 +216,12 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
             sub: userId,
             username: username,
             roles: ['user'],
-            isTest: true
+            isTest: true,
         });
         return {
             status: 'success',
             token,
-            message: 'TEST TOKEN - FOR DEVELOPMENT USE ONLY'
+            message: 'TEST TOKEN - FOR DEVELOPMENT USE ONLY',
         };
     }
     async validateUserCredentials(username, password) {
@@ -235,7 +235,7 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
             await this.redisService.set(userKey, JSON.stringify({
                 username,
                 password,
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
             }), 60 * 60 * 24 * 30);
             return true;
         }
@@ -262,7 +262,8 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
             if (initializeDto.event !== 'initialize') {
                 throw new common_1.BadRequestException('Event must be "initialize"');
             }
-            if (!initializeDto.payload || !Array.isArray(initializeDto.payload.channels)) {
+            if (!initializeDto.payload ||
+                !Array.isArray(initializeDto.payload.channels)) {
                 throw new common_1.BadRequestException('Invalid payload format. Channels array is required.');
             }
             let authenticatedUserId = null;
@@ -288,7 +289,7 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
                         id: channelId,
                         created: new Date().toISOString(),
                         active: true,
-                        creator: authenticatedUserId || 'anonymous'
+                        creator: authenticatedUserId || 'anonymous',
                     }));
                     this.logger.log(`Created new channel: ${channelId}`);
                     return { channelId, status: 'created' };
@@ -304,7 +305,7 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
                 message: 'Channels initialized successfully',
                 channels: channelResults,
                 authenticated: !!authenticatedUserId,
-                sessionId: (0, uuid_1.v4)()
+                sessionId: (0, uuid_1.v4)(),
             };
         }
         catch (error) {
@@ -318,7 +319,9 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
             if (broadcastDto.event !== 'broadcast') {
                 throw new common_1.BadRequestException('Event must be "broadcast"');
             }
-            if (!broadcastDto.channel_ids || !Array.isArray(broadcastDto.channel_ids) || broadcastDto.channel_ids.length === 0) {
+            if (!broadcastDto.channel_ids ||
+                !Array.isArray(broadcastDto.channel_ids) ||
+                broadcastDto.channel_ids.length === 0) {
                 throw new common_1.BadRequestException('Invalid request. At least one channel_id is required.');
             }
             if (!broadcastDto.payload) {
@@ -341,11 +344,11 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
                     _meta: {
                         timestamp: new Date().toISOString(),
                         source: 'api-broadcast',
-                        messageId: (0, uuid_1.v4)()
-                    }
-                }
+                        messageId: (0, uuid_1.v4)(),
+                    },
+                },
             };
-            const results = broadcastDto.channel_ids.map(channelId => {
+            const results = broadcastDto.channel_ids.map((channelId) => {
                 this.wsGateway.server.to(channelId).emit('outgoing_event', messageData);
                 this.redisService.publish(`channel:${channelId}`, JSON.stringify(messageData));
                 this.logger.log(`Broadcast sent to channel: ${channelId}`);
@@ -355,7 +358,7 @@ let WebSocketController = WebSocketController_1 = class WebSocketController {
                 status: 'success',
                 message: 'Broadcast sent successfully',
                 channels: results,
-                messageId: messageData.data._meta.messageId
+                messageId: messageData.data._meta.messageId,
             };
         }
         catch (error) {

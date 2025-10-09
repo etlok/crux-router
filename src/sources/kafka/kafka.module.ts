@@ -19,7 +19,6 @@ export class KafkaModule {
             if (!configService.get('features.enableKafka')) {
               return new NoopKafkaService();
             }
-         
           },
           inject: [ConfigService],
         },

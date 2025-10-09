@@ -34,7 +34,9 @@ let RouterService = class RouterService {
         const workflowKey = `workflow:${workflowName}`;
         const workflowRaw = await this.redis.get(workflowKey);
         if (!workflowRaw) {
-            await this.redisLoggerService.logResponse('router', workflowName, { error: `No workflow definition found for: ${workflowName}` });
+            await this.redisLoggerService.logResponse('router', workflowName, {
+                error: `No workflow definition found for: ${workflowName}`,
+            });
             throw new Error(`No workflow definition found for: ${workflowName}`);
         }
         const workflowDefinition = JSON.parse(workflowRaw);
@@ -53,7 +55,9 @@ let RouterService = class RouterService {
                 this.logger.log(`Found ${workerIds.length} workers from set for workflow: ${workflowName}`);
             }
             else {
-                await this.redisLoggerService.logResponse('router', workflowName, { error: `No workers found for workflow: ${workflowName}` });
+                await this.redisLoggerService.logResponse('router', workflowName, {
+                    error: `No workers found for workflow: ${workflowName}`,
+                });
                 throw new Error(`No workers found for workflow: ${workflowName}`);
             }
         }
@@ -74,13 +78,17 @@ let RouterService = class RouterService {
                         instance_id: instanceId,
                         current_thread_count: parseInt(instanceDetails.current_thread_count || '0', 10),
                         thread_capacity: parseInt(instanceDetails.thread_capacity || '1000', 10),
-                        utilization: (parseInt(instanceDetails.current_thread_count || '0', 10) / parseInt(instanceDetails.thread_capacity || '1000', 10)) * 100
+                        utilization: (parseInt(instanceDetails.current_thread_count || '0', 10) /
+                            parseInt(instanceDetails.thread_capacity || '1000', 10)) *
+                            100,
                     });
                 }
             }
         }
         if (workerInstances.length === 0) {
-            await this.redisLoggerService.logResponse('router', workflowName, { error: `No active worker instances found for workflow: ${workflowName}` });
+            await this.redisLoggerService.logResponse('router', workflowName, {
+                error: `No active worker instances found for workflow: ${workflowName}`,
+            });
             throw new Error(`No active worker instances found for workflow: ${workflowName}`);
         }
         workerInstances.sort((a, b) => a.utilization - b.utilization);
@@ -95,27 +103,27 @@ let RouterService = class RouterService {
                 const stepInstance = {
                     definition: {
                         type: step.type,
-                        class: step.class
+                        class: step.class,
                     },
                     data: {
                         workflow_instance_id,
                         worker_id: chosenWorker.worker_id,
                         worker_instance_id: chosenWorker.instance_id,
                         config: metadata?.config || {},
-                        metadata: metadata || {}
+                        metadata: metadata || {},
                     },
                     metadata: {
-                        start_time: "",
-                        end_time: "",
-                        status: "pending"
-                    }
+                        start_time: '',
+                        end_time: '',
+                        status: 'pending',
+                    },
                 };
                 await this.redis.hset(step_instance_id, 'definition', JSON.stringify(stepInstance.definition), 'data', JSON.stringify(stepInstance.data), 'metadata', JSON.stringify(stepInstance.metadata));
                 stepInstances.push(step_instance_id);
                 const queueKey = `worker_instance:${chosenWorker.instance_id}:queue`;
                 const queueItem = {
                     workflow_instance_id,
-                    step_instance_id
+                    step_instance_id,
                 };
                 await this.redis.lpush(queueKey, JSON.stringify(queueItem));
                 const stepAddedMsg = `Added step ${step_instance_id} to queue ${queueKey}`;
@@ -129,22 +137,22 @@ let RouterService = class RouterService {
                 hooks: workflowDefinition.hooks || {
                     on_start: {},
                     on_complete: {},
-                    on_failure: {}
+                    on_failure: {},
                 },
-                steps: stepInstances
+                steps: stepInstances,
             },
             data: {
                 workflow: workflowName,
                 payload: metadata || {},
                 workflow_instance_id,
-                request_id
+                request_id,
             },
             metadata: {
                 start_time: new Date().toISOString(),
-                end_time: "",
-                status: "pending",
-                current_step: stepInstances[0] || ""
-            }
+                end_time: '',
+                status: 'pending',
+                current_step: stepInstances[0] || '',
+            },
         };
         await this.redis.hset(workflow_instance_id, 'definition', JSON.stringify(workflowInstance.definition), 'data', JSON.stringify(workflowInstance.data), 'metadata', JSON.stringify(workflowInstance.metadata));
         await this.redisLoggerService.logResponse('router', workflowName, {
@@ -154,14 +162,14 @@ let RouterService = class RouterService {
             worker: {
                 id: chosenWorker.worker_id,
                 instance: chosenWorker.instance_id,
-                utilization: chosenWorker.utilization
-            }
+                utilization: chosenWorker.utilization,
+            },
         });
         return {
             status: 'workflow_started',
             workflow_instance_id,
             request_id,
-            steps: stepInstances
+            steps: stepInstances,
         };
     }
 };

@@ -45,9 +45,10 @@ let ClientAuthService = ClientAuthService_1 = class ClientAuthService {
     async revokeToken(token, expiry) {
         try {
             const decoded = this.jwtService.decode(token);
-            const expiryTime = expiry || (decoded && decoded['exp']
-                ? decoded['exp'] - Math.floor(Date.now() / 1000) + 10
-                : 3600);
+            const expiryTime = expiry ||
+                (decoded && decoded['exp']
+                    ? decoded['exp'] - Math.floor(Date.now() / 1000) + 10
+                    : 3600);
             await this.redisService.set(`revoked_token:${token}`, 'true', expiryTime);
             this.logger.log(`Token revoked: ${token.substring(0, 10)}...`);
         }
@@ -60,7 +61,7 @@ let ClientAuthService = ClientAuthService_1 = class ClientAuthService {
             sub: 'test-user-123',
             name: 'Test User',
             role: 'tester',
-            permissions: ['read', 'write']
+            permissions: ['read', 'write'],
         };
         return this.jwtService.sign(payload, { expiresIn: '365d' });
     }

@@ -58,8 +58,8 @@ let CustomMiddlewareRegistry = CustomMiddlewareRegistry_1 = class CustomMiddlewa
                 metadata: {
                     ...metadata,
                     createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                }
+                    updatedAt: new Date().toISOString(),
+                },
             };
             await this.redis.set(`middleware:${key}`, JSON.stringify(middlewareConfig));
             await this.redis.sadd('middleware:available', key);
@@ -87,14 +87,14 @@ let CustomMiddlewareRegistry = CustomMiddlewareRegistry_1 = class CustomMiddlewa
             if (config) {
                 middlewareConfig.config = {
                     ...middlewareConfig.config,
-                    ...config
+                    ...config,
                 };
             }
             if (metadata) {
                 middlewareConfig.metadata = {
                     ...middlewareConfig.metadata,
                     ...metadata,
-                    updatedAt: new Date().toISOString()
+                    updatedAt: new Date().toISOString(),
                 };
             }
             await this.redis.set(`middleware:${key}`, JSON.stringify(middlewareConfig));

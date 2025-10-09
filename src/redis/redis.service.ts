@@ -14,16 +14,25 @@ export class RedisService implements OnModuleDestroy {
   private connectionAttempts = 0;
   private lastReconnectTime = 0;
   private connectionErrors = 0;
+  private clientsInitialized = false;
 
   constructor() {
-   this.pubClient = createClient({
-      url: process.env.REDIS_URL || 'redis://localhost:6379',
+    const redisHost = process.env.REDIS_HOST || 'redis';
+    const redisPort = process.env.REDIS_PORT || '6379';
+    
+    this.logger.log(`Initializing Redis connection to ${redisHost}:${redisPort}`);
+    
+    this.pubClient = createClient({
       socket: {
+        host: redisHost,
+        port: parseInt(redisPort, 10),
         reconnectStrategy: (retries) => {
           this.connectionAttempts++;
           this.lastReconnectTime = Date.now();
           const delay = Math.min(1000 * 2 ** retries, 30000);
-          this.logger.warn(`Redis reconnect attempt #${retries}, retrying in ${delay}ms`);
+          this.logger.warn(
+            `Redis reconnect attempt #${retries}, retrying in ${delay}ms`,
+          );
           return delay;
         },
       },
@@ -32,31 +41,51 @@ export class RedisService implements OnModuleDestroy {
     this.subClient = this.pubClient.duplicate();
     this.connectClients();
 
-
-     // Add health check interval
-    this.connectionHealthCheck = setInterval(() => this.checkConnections(), 30000);
+    // Add health check interval
+    this.connectionHealthCheck = setInterval(
+      () => this.checkConnections(),
+      30000,
+    );
   }
 
   private async connectClients() {
+    // Set up event handlers before connecting
+    this.pubClient.on('error', (err) => {
+      this.connectionErrors++;
+      this.logger.error(`Redis pubClient error: ${err.message} - ${JSON.stringify({ stack: err.stack })}`);
+    });
+    
+    this.pubClient.on('connect', () => {
+      this.logger.log('Redis pubClient connected successfully');
+    });
+
+    this.subClient.on('error', (err) => {
+      this.connectionErrors++;
+      this.logger.error(`Redis subClient error: ${err.message} - ${JSON.stringify({ stack: err.stack })}`);
+    });
+    
+    this.subClient.on('connect', () => {
+      this.logger.log('Redis subClient connected successfully');
+    });
+
     try {
+      // Try to connect clients
+      this.logger.log('Connecting to Redis pubClient...');
       await this.pubClient.connect();
+      
+      this.logger.log('Connecting to Redis subClient...');
       await this.subClient.connect();
-      this.logger.log('Redis clients connected');
+      
+      this.logger.log('All Redis clients connected successfully');
+      this.clientsInitialized = true;
     } catch (err) {
-            this.connectionErrors++;
-      this.logger.error(`Redis connection error: ${err.message}`);
+      this.connectionErrors++;
+      this.logger.error(`Redis connection error: ${err.message} - ${JSON.stringify({ stack: err.stack })}`);
+      
+      // Try again after a delay
+      this.logger.log('Will retry connection in 2 seconds...');
       setTimeout(() => this.connectClients(), 2000);
     }
-
-    this.pubClient.on('error', (err) => {
-            this.connectionErrors++;
-
-      this.logger.error(`Redis pubClient error: ${err.message}`);
-    });
-    this.subClient.on('error', (err) => {
-            this.connectionErrors++;
-      this.logger.error(`Redis subClient error: ${err.message}`);
-    });
   }
 
   async subscribe(channel: string, callback: (message: string) => void) {
@@ -66,13 +95,10 @@ export class RedisService implements OnModuleDestroy {
       callback(message);
     });
 
-        this.activeSubscriptions.add(channel);
-            this.subscriptionCallbacks.set(channel, callback);
-
-
+    this.activeSubscriptions.add(channel);
+    this.subscriptionCallbacks.set(channel, callback);
   }
 
-  
   async unsubscribe(channel: string): Promise<void> {
     if (this.activeSubscriptions.has(channel)) {
       this.logger.log(`Unsubscribing from channel: ${channel}`);
@@ -80,13 +106,13 @@ export class RedisService implements OnModuleDestroy {
       this.activeSubscriptions.delete(channel);
       this.subscriptionCallbacks.delete(channel);
     } else {
-      this.logger.warn(`Attempted to unsubscribe from channel that wasn't subscribed: ${channel}`);
+      this.logger.warn(
+        `Attempted to unsubscribe from channel that wasn't subscribed: ${channel}`,
+      );
     }
   }
 
-
-
-    /**
+  /**
    * Get a value from Redis by key
    * @param key The key to retrieve
    * @returns The stored value or null if not found
@@ -101,8 +127,7 @@ export class RedisService implements OnModuleDestroy {
     }
   }
 
-
-    /**
+  /**
    * Set a value in Redis
    * @param key The key to set
    * @param value The value to store
@@ -120,7 +145,6 @@ export class RedisService implements OnModuleDestroy {
     }
   }
 
-
   async publish(channel: string, message: string) {
     this.logger.log(`Publishing to channel: ${channel} | message: ${message}`);
     await this.pubClient.publish(channel, message);
@@ -134,95 +158,98 @@ export class RedisService implements OnModuleDestroy {
     return this.subClient;
   }
 
- async onModuleDestroy() {
+  async onModuleDestroy() {
     this.logger.log('Closing Redis clients');
     clearInterval(this.connectionHealthCheck);
-    
+
     // Unsubscribe from all channels
     for (const channel of this.activeSubscriptions) {
       try {
         await this.subClient.unsubscribe(channel);
       } catch (err) {
-        this.logger.error(`Error unsubscribing from ${channel} during shutdown: ${err.message}`);
+        this.logger.error(
+          `Error unsubscribing from ${channel} during shutdown: ${err.message}`,
+        );
       }
     }
-    
+
     await this.pubClient.quit();
     await this.subClient.quit();
   }
 
   async exists(key: string): Promise<boolean> {
-  try {
-    const result = await this.pubClient.exists(key);
-    return result === 1;
-  } catch (err) {
-    this.logger.error(`Error checking if key ${key} exists: ${err.message}`);
-    return false;
+    try {
+      const result = await this.pubClient.exists(key);
+      return result === 1;
+    } catch (err) {
+      this.logger.error(`Error checking if key ${key} exists: ${err.message}`);
+      return false;
+    }
   }
-}
 
-async del(key: string): Promise<void> {
-  try {
-    await this.pubClient.del(key);
-  } catch (err) {
-    this.logger.error(`Error deleting key ${key}: ${err.message}`);
+  async del(key: string): Promise<void> {
+    try {
+      await this.pubClient.del(key);
+    } catch (err) {
+      this.logger.error(`Error deleting key ${key}: ${err.message}`);
+    }
   }
-}
 
-async keys(pattern: string): Promise<string[]> {
-  try {
-    return await this.pubClient.keys(pattern);
-  } catch (err) {
-    this.logger.error(`Error getting keys with pattern ${pattern}: ${err.message}`);
-    return [];
+  async keys(pattern: string): Promise<string[]> {
+    try {
+      return await this.pubClient.keys(pattern);
+    } catch (err) {
+      this.logger.error(
+        `Error getting keys with pattern ${pattern}: ${err.message}`,
+      );
+      return [];
+    }
   }
-}
 
-
-async lpush(key: string, value: string): Promise<number> {
-  try {
-    return await this.pubClient.lPush(key, value);
-  } catch (err) {
-    this.logger.error(`Error on LPUSH to ${key}: ${err.message}`);
-    return 0;
+  async lpush(key: string, value: string): Promise<number> {
+    try {
+      return await this.pubClient.lPush(key, value);
+    } catch (err) {
+      this.logger.error(`Error on LPUSH to ${key}: ${err.message}`);
+      return 0;
+    }
   }
-}
 
-async rpop(key: string): Promise<string | null> {
-  try {
-    return await this.pubClient.rPop(key);
-  } catch (err) {
-    this.logger.error(`Error on RPOP from ${key}: ${err.message}`);
-    return null;
+  async rpop(key: string): Promise<string | null> {
+    try {
+      return await this.pubClient.rPop(key);
+    } catch (err) {
+      this.logger.error(`Error on RPOP from ${key}: ${err.message}`);
+      return null;
+    }
   }
-}
 
-async hset(key: string, field: string, value: string): Promise<number> {
-  try {
-    return await this.pubClient.hSet(key, field, value);
-  } catch (err) {
-    this.logger.error(`Error on HSET to ${key}.${field}: ${err.message}`);
-    return 0;
+  async hset(key: string, field: string, value: string): Promise<number> {
+    try {
+      return await this.pubClient.hSet(key, field, value);
+    } catch (err) {
+      this.logger.error(`Error on HSET to ${key}.${field}: ${err.message}`);
+      return 0;
+    }
   }
-}
 
-async hget(key: string, field: string): Promise<string | null> {
-  try {
-    return await this.pubClient.hGet(key, field);
-  } catch (err) {
-    this.logger.error(`Error on HGET from ${key}.${field}: ${err.message}`);
-    return null;
+  async hget(key: string, field: string): Promise<string | null> {
+    try {
+      return await this.pubClient.hGet(key, field);
+    } catch (err) {
+      this.logger.error(`Error on HGET from ${key}.${field}: ${err.message}`);
+      return null;
+    }
   }
-}
 
-async hgetall(key: string): Promise<Record<string, string>> {
-  try {
-    return await this.pubClient.hGetAll(key);
-  } catch (err) {
-    this.logger.error(`Error on HGETALL from ${key}: ${err.message}`);
-    return {};
+  async hgetall(key: string): Promise<Record<string, string>> {
+    try {
+      return await this.pubClient.hGetAll(key);
+    } catch (err) {
+      this.logger.error(`Error on HGETALL from ${key}: ${err.message}`);
+      return {};
+    }
   }
-}
 
   getMetrics() {
     return {
@@ -231,27 +258,26 @@ async hgetall(key: string): Promise<Record<string, string>> {
         subClientConnected: this.subClient.isOpen,
         reconnectionAttempts: this.connectionAttempts,
         lastReconnectTime: this.lastReconnectTime,
-        connectionErrors: this.connectionErrors
+        connectionErrors: this.connectionErrors,
       },
       subscriptions: {
         activeCount: this.activeSubscriptions.size,
-        channels: Array.from(this.activeSubscriptions)
-      }
+        channels: Array.from(this.activeSubscriptions),
+      },
     };
   }
 
-
-    private async checkConnections() {
+  private async checkConnections() {
     try {
       if (!this.pubClient.isOpen) {
         this.logger.warn('Pub client disconnected, attempting reconnect');
         await this.pubClient.connect();
       }
-      
+
       if (!this.subClient.isOpen) {
         this.logger.warn('Sub client disconnected, attempting reconnect');
         await this.subClient.connect();
-        
+
         // Resubscribe to active channels
         for (const channel of this.activeSubscriptions) {
           const callback = this.subscriptionCallbacks.get(channel);
@@ -266,6 +292,27 @@ async hgetall(key: string): Promise<Record<string, string>> {
       this.logger.error(`Health check failed: ${err.message}`);
     }
   }
-
-
+  
+  /**
+   * Get Redis clients for Socket.IO adapter
+   * @returns An object containing pubClient and subClient for Socket.IO Redis adapter
+   */
+  async getSocketClients(): Promise<{ pubClient: RedisClientType; subClient: RedisClientType }> {
+    // Wait for clients to initialize if they haven't already
+    if (!this.clientsInitialized) {
+      this.logger.log('Waiting for Redis clients to initialize before providing socket clients');
+      await new Promise<void>((resolve) => {
+        const checkInterval = setInterval(() => {
+          if (this.clientsInitialized) {
+            clearInterval(checkInterval);
+            resolve();
+          }
+        }, 100);
+      });
+    }
+    
+    // Return the clients (they should be connected by now via the connectClients() method)
+    this.logger.log('Providing Redis clients for Socket.IO adapter');
+    return { pubClient: this.pubClient, subClient: this.subClient };
+  }
 }

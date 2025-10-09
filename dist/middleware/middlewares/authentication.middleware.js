@@ -24,7 +24,7 @@ let AuthenticationMiddleware = AuthenticationMiddleware_1 = class Authentication
                     context.metadata.middlewareResults.authentication = {
                         authenticated: true,
                         userId,
-                        timestamp: new Date().toISOString()
+                        timestamp: new Date().toISOString(),
                     };
                 }
             }
@@ -33,7 +33,7 @@ let AuthenticationMiddleware = AuthenticationMiddleware_1 = class Authentication
                 if (context.metadata && context.metadata.middlewareResults) {
                     context.metadata.middlewareResults.authentication = {
                         authenticated: false,
-                        timestamp: new Date().toISOString()
+                        timestamp: new Date().toISOString(),
                     };
                 }
             }

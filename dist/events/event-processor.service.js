@@ -37,7 +37,7 @@ let EventProcessorService = EventProcessorService_1 = class EventProcessorServic
                 metadata: {
                     startTime: Date.now(),
                     middlewareResults: {},
-                }
+                },
             };
             await this.middlewareConfig.setActiveMiddleware(eventPayload.middleware);
             await this.middlewareLoader.executeMiddlewareChain(context);
@@ -89,7 +89,7 @@ let EventProcessorService = EventProcessorService_1 = class EventProcessorServic
         catch (error) {
             this.logger.error(`Error sanitizing result: ${error.message}`);
             if (Array.isArray(result)) {
-                return result.map(item => this.createSafeObject(item));
+                return result.map((item) => this.createSafeObject(item));
             }
             else {
                 return this.createSafeObject(result);

@@ -61,7 +61,7 @@ let DynamicMiddlewareLoader = DynamicMiddlewareLoader_1 = class DynamicMiddlewar
         const console = {
             log: (...args) => this.logger.log(`[${key}] ${args.join(' ')}`),
             warn: (...args) => this.logger.warn(`[${key}] ${args.join(' ')}`),
-            error: (...args) => this.logger.error(`[${key}] ${args.join(' ')}`)
+            error: (...args) => this.logger.error(`[${key}] ${args.join(' ')}`),
         };
         const sandbox = {
             console,
@@ -90,7 +90,7 @@ let DynamicMiddlewareLoader = DynamicMiddlewareLoader_1 = class DynamicMiddlewar
                     return require(moduleName);
                 }
                 throw new Error(`Module '${moduleName}' is not allowed in custom middleware`);
-            }
+            },
         };
         return sandbox;
     }
@@ -100,10 +100,12 @@ let DynamicMiddlewareLoader = DynamicMiddlewareLoader_1 = class DynamicMiddlewar
             const context = vm.createContext(sandbox);
             script.runInContext(context, { timeout: 5000 });
             const moduleExports = sandbox.module.exports;
-            if (typeof moduleExports === 'object' && typeof moduleExports.execute === 'function') {
+            if (typeof moduleExports === 'object' &&
+                typeof moduleExports.execute === 'function') {
                 return moduleExports;
             }
-            if (typeof sandbox.exports === 'object' && typeof sandbox.exports.execute === 'function') {
+            if (typeof sandbox.exports === 'object' &&
+                typeof sandbox.exports.execute === 'function') {
                 return sandbox.exports;
             }
             if (typeof moduleExports === 'function') {
@@ -138,7 +140,7 @@ let DynamicMiddlewareLoader = DynamicMiddlewareLoader_1 = class DynamicMiddlewar
                         name: key,
                         priority,
                         enabled: true,
-                        middlewareInstance: instance
+                        middlewareInstance: instance,
                     });
                     this.logger.log(`Loaded custom middleware: ${key} (priority: ${priority})`);
                 }

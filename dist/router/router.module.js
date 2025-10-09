@@ -22,11 +22,11 @@ exports.RouterModule = RouterModule = __decorate([
     (0, common_1.Module)({
         imports: [
             nest_winston_1.WinstonModule.forRoot(winston_logger_1.winstonLoggerOptions),
-            (0, common_1.forwardRef)(() => events_module_1.EventsModule)
+            (0, common_1.forwardRef)(() => events_module_1.EventsModule),
         ],
         controllers: [router_controller_1.RouterController],
         providers: [router_service_1.RouterService, redis_provider_1.RedisProvider, redis_logger_service_1.RedisLoggerService],
-        exports: [router_service_1.RouterService]
+        exports: [router_service_1.RouterService],
     })
 ], RouterModule);
 //# sourceMappingURL=router.module.js.map

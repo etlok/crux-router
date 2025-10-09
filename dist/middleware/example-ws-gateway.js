@@ -25,7 +25,10 @@ let ExampleWebSocketGateway = class ExampleWebSocketGateway {
         console.log(`Client disconnected: ${client.id}`);
     }
     handlePing(client, data) {
-        return { event: 'pong', data: { received: data.timestamp, sent: Date.now() } };
+        return {
+            event: 'pong',
+            data: { received: data.timestamp, sent: Date.now() },
+        };
     }
     async handleAuthenticate(client, data) {
         if (client.data.isAuthenticated) {
@@ -36,9 +39,9 @@ let ExampleWebSocketGateway = class ExampleWebSocketGateway {
                     message: 'Authentication successful',
                     user: {
                         id: client.data.user.sub,
-                        name: client.data.user.name
-                    }
-                }
+                        name: client.data.user.name,
+                    },
+                },
             };
         }
         else {
@@ -46,8 +49,8 @@ let ExampleWebSocketGateway = class ExampleWebSocketGateway {
                 event: 'authenticated',
                 data: {
                     success: false,
-                    message: client.data.authError || 'Authentication failed'
-                }
+                    message: client.data.authError || 'Authentication failed',
+                },
             };
         }
     }
@@ -55,7 +58,7 @@ let ExampleWebSocketGateway = class ExampleWebSocketGateway {
         if (!client.data.isAuthenticated) {
             client.emit('error', {
                 code: 'UNAUTHORIZED',
-                message: 'Authentication required for this action'
+                message: 'Authentication required for this action',
             });
             return;
         }
@@ -64,8 +67,8 @@ let ExampleWebSocketGateway = class ExampleWebSocketGateway {
             data: {
                 message: 'You have accessed a protected event',
                 user: client.data.user,
-                receivedData: data
-            }
+                receivedData: data,
+            },
         };
     }
     handleError() {

@@ -24,52 +24,62 @@ interface WebSocketContext {
 export class ErrorHandlingMiddleware extends BaseMiddleware {
   private readonly logger = new Logger(ErrorHandlingMiddleware.name);
 
-  async execute(context: WebSocketContext, next: () => Promise<void>): Promise<void> {
+  async execute(
+    context: WebSocketContext,
+    next: () => Promise<void>,
+  ): Promise<void> {
     try {
       // Add error handling context
       context.metadata.errorHandling = {
-        started: Date.now()
+        started: Date.now(),
       };
-      
+
       // Continue to the next middleware
       await next();
-      
+
       // If we got here without errors, record success
       context.metadata.errorHandling.status = 'success';
       context.metadata.errorHandling.completed = Date.now();
-      
     } catch (error) {
       // Record error
       context.metadata.errorHandling.status = 'error';
       context.metadata.errorHandling.error = error;
       context.metadata.errorHandling.completed = Date.now();
-      
-      this.logger.error(`Error processing event ${context.event}: ${error.message}`);
-      
+
+      this.logger.error(
+        `Error processing event ${context.event}: ${error.message}`,
+      );
+
       // Format a consistent error response
       const errorResponse = {
         status: 'error',
         code: error.code || 'INTERNAL_ERROR',
         message: error.message || 'An unexpected error occurred',
         timestamp: new Date().toISOString(),
-        requestId: this.generateRequestId()
+        requestId: this.generateRequestId(),
       };
-      
+
       // Send error response to client
       context.client.emit('error', errorResponse);
-      
+
       // Optionally log the error for debugging
-      this.logger.debug(`Error details: ${JSON.stringify({
-        event: context.event,
-        clientId: context.client.id,
-        error: errorResponse,
-        data: context.data
-      }, null, 2)}`);
-      
+      this.logger.debug(
+        `Error details: ${JSON.stringify(
+          {
+            event: context.event,
+            clientId: context.client.id,
+            error: errorResponse,
+            data: context.data,
+          },
+          null,
+          2,
+        )}`,
+      );
+
       // Don't re-throw, we've handled it here
     }
   }
-  
+
   /**
    * Generate a simple request ID for error tracking
    */

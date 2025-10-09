@@ -6,17 +6,16 @@ import { AuthGuard } from '../middleware/auth.guard';
  */
 @Controller('protected')
 export class ProtectedController {
-  
   /**
    * Public route - no authentication required
    */
   @Get('public')
   publicEndpoint() {
     return {
-      message: 'This is a public endpoint that anyone can access'
+      message: 'This is a public endpoint that anyone can access',
     };
   }
-  
+
   /**
    * Protected route - requires authentication
    */
@@ -24,10 +23,10 @@ export class ProtectedController {
   @Get('private')
   privateEndpoint() {
     return {
-      message: 'This is a protected endpoint that requires authentication'
+      message: 'This is a protected endpoint that requires authentication',
     };
   }
-  
+
   /**
    * Protected route with user info
    */
@@ -36,7 +35,7 @@ export class ProtectedController {
   userInfo(@Req() req) {
     return {
       message: 'This is your user information',
-      user: req.user
+      user: req.user,
     };
   }
 }

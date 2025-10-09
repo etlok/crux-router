@@ -29,9 +29,9 @@ import { EventsModule } from './events/events.module';
     MiddlewareModule,
     FileParserModule,
     EventsModule,
-    KafkaModule.register()
+    KafkaModule.register(),
   ],
-    controllers: [ApiController],
+  controllers: [ApiController],
   providers: [WSGateway, RedisService, RouterService, ClientAuthService],
 })
 export class AppModule {}

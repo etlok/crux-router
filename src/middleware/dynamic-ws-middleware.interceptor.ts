@@ -1,4 +1,10 @@
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+  Logger,
+} from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { Socket } from 'socket.io';
 import { MiddlewareLoaderService } from './middleware-loader.service';
@@ -16,7 +22,10 @@ export class DynamicWsMiddlewareInterceptor implements NestInterceptor {
   /**
    * Intercept method that runs before each WebSocket message handler
    */
-  async intercept(context: ExecutionContext, next: CallHandler): Promise<Observable<any>> {
+  async intercept(
+    context: ExecutionContext,
+    next: CallHandler,
+  ): Promise<Observable<any>> {
     // Make sure middleware is initialized
     if (!this.initialized) {
       await this.middlewareLoader.initializeMiddleware();
@@ -33,7 +42,7 @@ export class DynamicWsMiddlewareInterceptor implements NestInterceptor {
     const data = context.switchToWs().getData();
     const eventInfo = context.getArgByIndex(2);
     const event = eventInfo?.event || 'unknown';
-    
+
     // Create middleware context
     const middlewareContext = {
       client,
@@ -41,13 +50,13 @@ export class DynamicWsMiddlewareInterceptor implements NestInterceptor {
       event,
       eventInfo,
       timestamp: Date.now(),
-      metadata: {}
+      metadata: {},
     };
 
     try {
       // Execute all middleware
       await this.middlewareLoader.executeMiddlewareChain(middlewareContext);
-      
+
       // Continue with request handling
       return next.handle();
     } catch (error) {

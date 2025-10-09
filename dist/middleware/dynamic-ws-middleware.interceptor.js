@@ -38,7 +38,7 @@ let DynamicWsMiddlewareInterceptor = DynamicWsMiddlewareInterceptor_1 = class Dy
             event,
             eventInfo,
             timestamp: Date.now(),
-            metadata: {}
+            metadata: {},
         };
         try {
             await this.middlewareLoader.executeMiddlewareChain(middlewareContext);

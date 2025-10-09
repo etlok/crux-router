@@ -6,7 +6,9 @@ const winston = require("winston");
 exports.winstonLoggerOptions = {
     transports: [
         new winston.transports.Console({
-            format: winston.format.combine(winston.format.timestamp(), nest_winston_1.utilities.format.nestLike('App', { prettyPrint: true })),
+            format: winston.format.combine(winston.format.timestamp(), nest_winston_1.utilities.format.nestLike('App', {
+                prettyPrint: true,
+            })),
         }),
         new winston.transports.File({
             filename: 'logs/app.log',

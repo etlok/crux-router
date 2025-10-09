@@ -7,7 +7,10 @@ export class KafkaController {
 
   @Post('produce')
   async produce(@Body() body: { eventName: string }) {
-    await this.kafkaService.sendMessage(process.env.KAFKA_TOPIC || 'event-topic', JSON.stringify(body));
+    await this.kafkaService.sendMessage(
+      process.env.KAFKA_TOPIC || 'event-topic',
+      JSON.stringify(body),
+    );
     return { status: 'sent', eventName: body.eventName };
   }
 }

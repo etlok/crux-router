@@ -35,40 +35,48 @@ export class FileParserService {
     try {
       // Parse JSON
       const jsonData = JSON.parse(content);
-      
+
       // Validate array format
       if (!Array.isArray(jsonData)) {
-        throw new BadRequestException('JSON content must be an array of events');
+        throw new BadRequestException(
+          'JSON content must be an array of events',
+        );
       }
-      
+
       // Transform and validate each event
-      const events = jsonData.map(event => {
+      const events = jsonData.map((event) => {
         const eventObj = plainToClass(EventDto, event);
-        const errors = validateSync(eventObj, { 
-          whitelist: true, 
+        const errors = validateSync(eventObj, {
+          whitelist: true,
           forbidNonWhitelisted: true,
-          forbidUnknownValues: true
+          forbidUnknownValues: true,
         });
-        
+
         if (errors.length > 0) {
-          const messages = errors.map(error => {
-            const constraints = error.constraints ? Object.values(error.constraints) : ['Invalid value'];
+          const messages = errors.map((error) => {
+            const constraints = error.constraints
+              ? Object.values(error.constraints)
+              : ['Invalid value'];
             return `${error.property}: ${constraints.join(', ')}`;
           });
-          
-          throw new BadRequestException(`Validation failed: ${messages.join('; ')}`);
+
+          throw new BadRequestException(
+            `Validation failed: ${messages.join('; ')}`,
+          );
         }
-        
+
         return eventObj;
       });
-      
+
       return events;
     } catch (error) {
       this.logger.error(`Error validating content: ${error.message}`);
       if (error instanceof BadRequestException) {
         throw error;
       }
-      throw new BadRequestException(`Failed to validate content: ${error.message}`);
+      throw new BadRequestException(
+        `Failed to validate content: ${error.message}`,
+      );
     }
   }
 

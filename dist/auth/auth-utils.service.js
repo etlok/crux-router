@@ -23,11 +23,11 @@ let AuthUtilsService = class AuthUtilsService {
     generateTestToken(userId, additionalClaims = {}) {
         return this.jwtService.sign({
             sub: userId,
-            ...additionalClaims
+            ...additionalClaims,
         }, {
             secret: this.configService.get('jwt.secret'),
             issuer: this.configService.get('jwt.issuer'),
-            audience: this.configService.get('jwt.audience')
+            audience: this.configService.get('jwt.audience'),
         });
     }
 };

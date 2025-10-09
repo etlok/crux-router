@@ -26,7 +26,7 @@ let RateLimitingMiddleware = RateLimitingMiddleware_1 = class RateLimitingMiddle
         if (!rateLimitData || now > rateLimitData.resetTime) {
             rateLimitData = {
                 count: 0,
-                resetTime: now + this.RATE_WINDOW
+                resetTime: now + this.RATE_WINDOW,
             };
             this.rateLimits.set(clientId, rateLimitData);
         }
@@ -35,7 +35,7 @@ let RateLimitingMiddleware = RateLimitingMiddleware_1 = class RateLimitingMiddle
             this.logger.warn(`Rate limit exceeded for client: ${clientId}`);
             client.emit('error', {
                 code: 'RATE_LIMIT_EXCEEDED',
-                message: 'You have exceeded the rate limit'
+                message: 'You have exceeded the rate limit',
             });
         }
         await next();

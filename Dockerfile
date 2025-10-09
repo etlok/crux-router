@@ -37,13 +37,6 @@ COPY verify-middleware-keys.js ./
 COPY src/middleware/setup-middleware-config.js ./setup-middleware-config.js
 COPY src/middleware/inspect-redis-middleware.js ./inspect-redis-middleware.js
 
-# Copy workflow definitions and configuration files
-COPY workflow_definitions.json ./
-COPY workflow_instance.json ./
-COPY step.json ./
-COPY steps.json ./
-COPY queue.json ./
-
 # Create logs directory and set permissions
 RUN mkdir -p logs && chmod 777 logs
 

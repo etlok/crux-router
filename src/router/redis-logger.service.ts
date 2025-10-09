@@ -3,9 +3,7 @@ import Redis from 'ioredis';
 
 @Injectable()
 export class RedisLoggerService {
-  constructor(
-    @Inject('REDIS_CLIENT') private readonly redis: Redis,
-  ) {}
+  constructor(@Inject('REDIS_CLIENT') private readonly redis: Redis) {}
 
   async logRequest(source: string, eventName: string, payload: any) {
     const log = {
@@ -28,7 +26,6 @@ export class RedisLoggerService {
     };
     await this.redis.lpush('activity:logs', JSON.stringify(log));
   }
-
 
   async getRecentLogs(count = 100) {
     const logs = await this.redis.lrange('activity:logs', 0, count - 1);

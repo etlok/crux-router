@@ -76,6 +76,8 @@ __decorate([
 ], ApiController.prototype, "handleIncomingAPIEvent", null);
 exports.ApiController = ApiController = __decorate([
     (0, common_1.Controller)('events'),
-    __metadata("design:paramtypes", [redis_service_1.RedisService, websocket_gateway_1.WSGateway, router_service_1.RouterService])
+    __metadata("design:paramtypes", [redis_service_1.RedisService,
+        websocket_gateway_1.WSGateway,
+        router_service_1.RouterService])
 ], ApiController);
 //# sourceMappingURL=api.controller.js.map

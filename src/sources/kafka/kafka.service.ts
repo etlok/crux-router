@@ -1,4 +1,9 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  OnModuleInit,
+  OnModuleDestroy,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Kafka, Consumer, Producer, logLevel, KafkaMessage } from 'kafkajs';
 import { RedisService } from 'src/redis/redis.service';
@@ -16,8 +21,7 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private redisService: RedisService,
     private routerService: RouterService,
-        private readonly configService: ConfigService,
-
+    private readonly configService: ConfigService,
   ) {
     this.kafka = new Kafka({
       clientId: 'ws-router-client',
@@ -51,49 +55,53 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
       this.logger.log('Kafka consumer and producer connected');
     } catch (err) {
       const delay = Math.min(1000 * 2 ** retries, 30000);
-      this.logger.error(`Kafka connection failed: ${err.message}. Retrying in ${delay}ms`);
+      this.logger.error(
+        `Kafka connection failed: ${err.message}. Retrying in ${delay}ms`,
+      );
       setTimeout(() => this.connectWithRetry(retries + 1), delay);
     }
   }
 
-
-
-    // Add a method to handle failed messages
+  // Add a method to handle failed messages
   private async handleFailedMessage(message: KafkaMessage, error: Error) {
-    const messageId = message.key?.toString() || 
-                     `${message.timestamp}-${message.offset}`;
-                     
+    const messageId =
+      message.key?.toString() || `${message.timestamp}-${message.offset}`;
+
     // Check if we've already retried this message too many times
     const retryCount = this.messageRetryCount.get(messageId) || 0;
-    
+
     if (retryCount >= this.MAX_RETRY_ATTEMPTS) {
       // We've retried enough - send to dead letter queue
       try {
         await this.producer.send({
-          topic: this.configService.get('app.kafka.deadLetterTopic') || 'dead-letter-queue',
-          messages: [{
-            key: message.key,
-            value: JSON.stringify({
-              originalMessage: message.value?.toString(),
-              error: error.message,
-              processingAttempts: retryCount + 1,
-              timestamp: new Date().toISOString()
-            })
-          }]
-    });
-        
+          topic:
+            this.configService.get('app.kafka.deadLetterTopic') ||
+            'dead-letter-queue',
+          messages: [
+            {
+              key: message.key,
+              value: JSON.stringify({
+                originalMessage: message.value?.toString(),
+                error: error.message,
+                processingAttempts: retryCount + 1,
+                timestamp: new Date().toISOString(),
+              }),
+            },
+          ],
+        });
+
         this.logger.warn(
           `Message sent to dead letter queue after ${retryCount + 1} attempts: ${messageId}`,
-          KafkaService.name
+          KafkaService.name,
         );
-        
+
         // Clear from retry tracking
         this.messageRetryCount.delete(messageId);
       } catch (dlqError) {
         this.logger.error(
           `Failed to send message to dead letter queue: ${dlqError.message}`,
           dlqError.stack,
-          KafkaService.name
+          KafkaService.name,
         );
       }
     } else {
@@ -101,44 +109,49 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
       this.messageRetryCount.set(messageId, retryCount + 1);
       this.logger.warn(
         `Will retry processing message ${messageId}. Attempt ${retryCount + 1} of ${this.MAX_RETRY_ATTEMPTS}`,
-        KafkaService.name
+        KafkaService.name,
       );
     }
   }
 
+  async subscribeAndRun() {
+    // First, subscribe to the topic(s)
+    await this.consumer.subscribe({
+      topics: ['event-topic'],
+      fromBeginning: false,
+    });
 
-
- async subscribeAndRun() {
-
-  // First, subscribe to the topic(s)
-  await this.consumer.subscribe({ 
-    topics:['event-topic'],
-    fromBeginning: false 
-  });
-  
     await this.consumer.run({
       eachMessage: async ({ topic, partition, message }) => {
         try {
-          if(!message.value) return;
+          if (!message.value) return;
 
           const parsedMessage = JSON.parse(message.value.toString());
-          this.logger.log(`Received message from Kafka: ${JSON.stringify(parsedMessage)}`, KafkaService.name);
-          
+          this.logger.log(
+            `Received message from Kafka: ${JSON.stringify(parsedMessage)}`,
+            KafkaService.name,
+          );
+
           const { event, payload } = parsedMessage;
           if (!event) {
             throw new Error('Missing event field in Kafka message');
           }
-          
+
           // Route the event to the router service
           await this.routerService.routeEvent(event, payload);
-          
+
           // On success, remove from retry tracking if it exists
-          const messageId = message.key?.toString() || `${message.timestamp}-${message.offset}`;
+          const messageId =
+            message.key?.toString() || `${message.timestamp}-${message.offset}`;
           if (this.messageRetryCount.has(messageId)) {
             this.messageRetryCount.delete(messageId);
           }
         } catch (error) {
-          this.logger.error(`Error processing Kafka message: ${error.message}`, error.stack, KafkaService.name);
+          this.logger.error(
+            `Error processing Kafka message: ${error.message}`,
+            error.stack,
+            KafkaService.name,
+          );
           await this.handleFailedMessage(message, error);
         }
       },
@@ -146,10 +159,17 @@ export class KafkaService implements OnModuleInit, OnModuleDestroy {
   }
 
   async sendMessage(topic: string, message: any) {
-    this.logger.log(`Sending message to topic ${topic}: ${JSON.stringify(message)}`);
+    this.logger.log(
+      `Sending message to topic ${topic}: ${JSON.stringify(message)}`,
+    );
     await this.producer.send({
       topic,
-      messages: [{ value: typeof message === 'string' ? message : JSON.stringify(message) }],
+      messages: [
+        {
+          value:
+            typeof message === 'string' ? message : JSON.stringify(message),
+        },
+      ],
     });
   }
 

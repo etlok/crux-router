@@ -14,7 +14,9 @@ export class NoopKafkaService {
   }
 
   async sendMessage(topic: string, message: any) {
-    this.logger.debug(`[NOOP] Would send message to topic ${topic}: ${JSON.stringify(message)}`);
+    this.logger.debug(
+      `[NOOP] Would send message to topic ${topic}: ${JSON.stringify(message)}`,
+    );
     return Promise.resolve();
   }
 

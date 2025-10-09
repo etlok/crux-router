@@ -6,7 +6,7 @@ import { ConfigService } from '@nestjs/config';
 export class AuthUtilsService {
   constructor(
     private readonly jwtService: JwtService,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -15,15 +15,21 @@ export class AuthUtilsService {
    * @param additionalClaims Additional claims to include
    * @returns JWT token string
    */
-  generateTestToken(userId: string, additionalClaims: Record<string, any> = {}): string {
-    return this.jwtService.sign({
-      sub: userId,
-      ...additionalClaims
-    }, {
-      secret: this.configService.get<string>('jwt.secret'),
-     // expiresIn: this.configService.get<string>('jwt.expiresIn'),
-      issuer: this.configService.get<string>('jwt.issuer'),
-      audience: this.configService.get<string>('jwt.audience')
-    });
+  generateTestToken(
+    userId: string,
+    additionalClaims: Record<string, any> = {},
+  ): string {
+    return this.jwtService.sign(
+      {
+        sub: userId,
+        ...additionalClaims,
+      },
+      {
+        secret: this.configService.get<string>('jwt.secret'),
+        // expiresIn: this.configService.get<string>('jwt.expiresIn'),
+        issuer: this.configService.get<string>('jwt.issuer'),
+        audience: this.configService.get<string>('jwt.audience'),
+      },
+    );
   }
 }

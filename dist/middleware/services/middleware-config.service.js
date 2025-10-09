@@ -74,7 +74,7 @@ let MiddlewareConfigService = MiddlewareConfigService_1 = class MiddlewareConfig
                                 key: key,
                                 type: 'class',
                                 path: hash.path || '',
-                                config: hash.config ? JSON.parse(hash.config) : {}
+                                config: hash.config ? JSON.parse(hash.config) : {},
                             };
                             configs.push(classConfig);
                         }
@@ -82,7 +82,7 @@ let MiddlewareConfigService = MiddlewareConfigService_1 = class MiddlewareConfig
                             const groupConfig = {
                                 key: key,
                                 type: 'group',
-                                keys: hash.keys ? JSON.parse(hash.keys) : []
+                                keys: hash.keys ? JSON.parse(hash.keys) : [],
                             };
                             configs.push(groupConfig);
                         }
