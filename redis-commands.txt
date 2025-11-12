@@ -1,0 +1,37 @@
+# Redis Commands for Entity Creation Workflow Sample Data
+# Copy and paste these commands into your Redis CLI on Amazon Linux
+
+# 1. Create Workflow Definition
+HSET workflow:create_entity id "create_entity" name "Create Entity Workflow" description "Workflow for creating new entities" version "1.0" status "active" created_at "2025-10-15T10:30:00Z"
+
+# 2. Create Workers
+HSET worker:validation_worker_001 id "validation_worker_001" name "Validation Worker 1" type "validation" status "active" thread_capacity "10" current_thread_count "0" max_concurrent_tasks "10"
+
+HSET worker:processing_worker_001 id "processing_worker_001" name "Processing Worker 1" type "processing" status "active" thread_capacity "8" current_thread_count "2" max_concurrent_tasks "8"
+
+HSET worker:notification_worker_001 id "notification_worker_001" name "Notification Worker 1" type "notification" status "active" thread_capacity "15" current_thread_count "1" max_concurrent_tasks "15"
+
+# 3. Register Active Workers
+SADD workers:active validation_worker_001 processing_worker_001 notification_worker_001
+SADD workers:by_type:validation validation_worker_001
+SADD workers:by_type:processing processing_worker_001
+SADD workers:by_type:notification notification_worker_001
+
+# 4. Sample WebSocket Event Payload
+SET sample:event:create_entity '{"event_id":"evt_123456789","event_type":"create_entity","workflow_id":"create_entity","timestamp":"2025-10-15T10:30:00Z","source":"web_client","payload":{"entity":{"name":"Sample Product","type":"product","attributes":{"category":"electronics","price":299.99,"description":"High-quality device","sku":"PROD-2025-001"}}}}'
+
+# 5. Middleware Configuration
+SET middleware:config:active '{"version":"1.2.0","middlewares":[{"id":"auth_middleware","name":"Authentication","enabled":true,"order":1},{"id":"validation_middleware","name":"Validation","enabled":true,"order":2},{"id":"logging_middleware","name":"Logging","enabled":true,"order":3}]}'
+
+# 6. System Metrics
+HSET system:metrics total_workers "3" active_workers "3" total_thread_capacity "33" current_thread_usage "3"
+
+# 7. Sample Task Queue
+LPUSH queue:create_entity:pending '{"task_id":"task_001","event_id":"evt_123456789","workflow_id":"create_entity","step_id":"validate_input","worker_type":"validation","priority":"normal"}'
+
+# Verification Commands (run these to check your data):
+# HGETALL workflow:create_entity
+# HGETALL worker:validation_worker_001  
+# GET sample:event:create_entity
+# SMEMBERS workers:active
+# LRANGE queue:create_entity:pending 0 -1

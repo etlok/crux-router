@@ -17,7 +17,12 @@ let AuthenticationMiddleware = AuthenticationMiddleware_1 = class Authentication
             const { isAuthenticated, userId, userInfo } = context.sourceContext;
             context.isAuthenticated = isAuthenticated;
             context.userId = userId;
-            context.userInfo = userInfo;
+            context.userInfo = {
+                ...userInfo,
+                entities: userInfo?.entities || [],
+                roles: userInfo?.roles || [],
+                permissions: userInfo?.permissions || []
+            };
             if (isAuthenticated) {
                 this.logger.log(`User is authenticated: ${userId || 'unknown'}`);
                 if (context.metadata && context.metadata.middlewareResults) {

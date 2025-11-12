@@ -28,6 +28,6 @@ async function bootstrap() {
   // Use the adapter for WebSocket connections
   app.useWebSocketAdapter(redisIoAdapter);
 
-  await app.listen(3000);
+  await app.listen(4000);
 }
 bootstrap();

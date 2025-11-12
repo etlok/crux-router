@@ -25,9 +25,13 @@ let RedisService = RedisService_1 = class RedisService {
     connectionErrors = 0;
     clientsInitialized = false;
     constructor() {
+        const redisHost = process.env.REDIS_HOST || 'redis';
+        const redisPort = process.env.REDIS_PORT || '6379';
+        this.logger.log(`Initializing Redis connection to ${redisHost}:${redisPort}`);
         this.pubClient = (0, redis_1.createClient)({
-            url: process.env.REDIS_URL || 'redis://localhost:6379',
             socket: {
+                host: redisHost,
+                port: parseInt(redisPort, 10),
                 reconnectStrategy: (retries) => {
                     this.connectionAttempts++;
                     this.lastReconnectTime = Date.now();
@@ -42,24 +46,34 @@ let RedisService = RedisService_1 = class RedisService {
         this.connectionHealthCheck = setInterval(() => this.checkConnections(), 30000);
     }
     async connectClients() {
-        try {
-            await this.pubClient.connect();
-            await this.subClient.connect();
-            this.logger.log('Redis clients connected');
-        }
-        catch (err) {
-            this.connectionErrors++;
-            this.logger.error(`Redis connection error: ${err.message}`);
-            setTimeout(() => this.connectClients(), 2000);
-        }
         this.pubClient.on('error', (err) => {
             this.connectionErrors++;
-            this.logger.error(`Redis pubClient error: ${err.message}`);
+            this.logger.error(`Redis pubClient error: ${err.message} - ${JSON.stringify({ stack: err.stack })}`);
+        });
+        this.pubClient.on('connect', () => {
+            this.logger.log('Redis pubClient connected successfully');
         });
         this.subClient.on('error', (err) => {
             this.connectionErrors++;
-            this.logger.error(`Redis subClient error: ${err.message}`);
+            this.logger.error(`Redis subClient error: ${err.message} - ${JSON.stringify({ stack: err.stack })}`);
         });
+        this.subClient.on('connect', () => {
+            this.logger.log('Redis subClient connected successfully');
+        });
+        try {
+            this.logger.log('Connecting to Redis pubClient...');
+            await this.pubClient.connect();
+            this.logger.log('Connecting to Redis subClient...');
+            await this.subClient.connect();
+            this.logger.log('All Redis clients connected successfully');
+            this.clientsInitialized = true;
+        }
+        catch (err) {
+            this.connectionErrors++;
+            this.logger.error(`Redis connection error: ${err.message} - ${JSON.stringify({ stack: err.stack })}`);
+            this.logger.log('Will retry connection in 2 seconds...');
+            setTimeout(() => this.connectClients(), 2000);
+        }
     }
     async subscribe(channel, callback) {
         this.logger.log(`Subscribing to channel: ${channel}`);
@@ -239,24 +253,18 @@ let RedisService = RedisService_1 = class RedisService {
         }
     }
     async getSocketClients() {
-        if (!this.pubClient.isOpen) {
-            try {
-                await this.pubClient.connect();
-            }
-            catch (err) {
-                this.logger.error(`Error connecting Redis pub client: ${err.message}`);
-                throw err;
-            }
+        if (!this.clientsInitialized) {
+            this.logger.log('Waiting for Redis clients to initialize before providing socket clients');
+            await new Promise((resolve) => {
+                const checkInterval = setInterval(() => {
+                    if (this.clientsInitialized) {
+                        clearInterval(checkInterval);
+                        resolve();
+                    }
+                }, 100);
+            });
         }
-        if (!this.subClient.isOpen) {
-            try {
-                await this.subClient.connect();
-            }
-            catch (err) {
-                this.logger.error(`Error connecting Redis sub client: ${err.message}`);
-                throw err;
-            }
-        }
+        this.logger.log('Providing Redis clients for Socket.IO adapter');
         return { pubClient: this.pubClient, subClient: this.subClient };
     }
 };

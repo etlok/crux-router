@@ -19,7 +19,12 @@ export class AuthenticationMiddleware extends BaseMiddleware {
       // Store authentication info in context for other middleware
       context.isAuthenticated = isAuthenticated;
       context.userId = userId;
-      context.userInfo = userInfo;
+      context.userInfo = {
+        ...userInfo,
+        entities: userInfo?.entities || [],  // Ensure entities array exists
+        roles: userInfo?.roles || [],
+        permissions: userInfo?.permissions || []
+      };
 
       if (isAuthenticated) {
         this.logger.log(`User is authenticated: ${userId || 'unknown'}`);

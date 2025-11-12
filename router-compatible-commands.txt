@@ -1,0 +1,63 @@
+# Redis Commands Compatible with RouterService Logic
+# Copy and paste these commands into your Redis CLI
+
+# 1. Workflow Definition (key: workflow:create_entity) - Updated structure
+SET workflow:create_entity '{"id":"create_entity","name":"Create Entity Workflow","description":"Workflow for creating new entities","version":"1.0","status":"active","hooks":{"on_start":{"type":"standard","class":"CreateEntityOnStart"},"on_complete":{"type":"standard","class":"CreateEntityOnComplete"},"on_failure":{"type":"standard","class":"CreateEntityOnFailure"}},"steps":[{"type":"loop","class":"CreateEntityLoop","steps":[{"type":"standard","class":"CreateEntity"}]}]}'
+
+# 2. Workflow Worker Assignments (Hash - primary lookup)
+HSET workflow:create_entity:workers create_entity_worker "active" create_entity_worker_2 "active" create_entity_worker_3 "active"
+
+
+# 4. Worker Instance Registry
+SADD crux:component:create_entity_worker:instances crux:component:create_entity_worker:instance:001 crux:component:create_entity_worker:instance:002
+SADD crux:component:create_entity_worker_2:instances crux:component:create_entity_worker_2:instance:001
+SADD crux:component:create_entity_worker_3:instances crux:component:create_entity_worker_3:instance:001 crux:component:create_entity_worker_3:instance:002
+
+# 5. Worker Instance Details (with different utilization levels for testing)
+
+# Validation Worker Instance 001 (20% utilization)
+HSET crux:component:create_entity_worker:instance:001 worker_id "create_entity_worker" instance_id "crux:component:create_entity_worker:instance:001" status "online" thread_capacity "10" current_thread_count "2" hostname "validation-node-01" port "3001"
+
+# Validation Worker Instance 002 (0% utilization - should be selected first)
+HSET crux:component:create_entity_worker:instance:002 worker_id "create_entity_worker" instance_id "crux:component:create_entity_worker:instance:002" status "online" thread_capacity "10" current_thread_count "0" hostname "validation-node-02" port "3001"
+
+# Processing Worker Instance 001 (12.5% utilization)
+HSET crux:component:create_entity_worker_2:instance:001 worker_id "create_entity_worker_2" instance_id "crux:component:create_entity_worker_2:instance:001" status "online" thread_capacity "8" current_thread_count "1" hostname "processing-node-01" port "3002"
+
+# Notification Worker Instance 001 (0% utilization)
+HSET crux:component:create_entity_worker_3:instance:001 worker_id "create_entity_worker_3" instance_id "crux:component:create_entity_worker_3:instance:001" status "online" thread_capacity "15" current_thread_count "0" hostname "notification-node-01" port "3003"
+
+# Notification Worker Instance 002 (20% utilization)
+HSET crux:component:create_entity_worker_3:instance:002 worker_id "create_entity_worker_3" instance_id "crux:component:create_entity_worker_3:instance:002" status "online" thread_capacity "15" current_thread_count "3" hostname "notification-node-02" port "3003"
+
+# 6. Sample Event Payloads for Testing RouterService - Updated structure
+
+# Event with single middleware
+SET sample:event:create_entity_websocket '{"event":"create_entity_websocket","config":{},"middleware":["authentication"],"actions":[{"type":"execute_workflow","workflow":"create_entity","config":{"resulting_event":"entity_created","relationship_type":"CREATOR"}}]}'
+
+# Event with multiple individual middlewares
+SET sample:event:create_entity_full '{"event":"create_entity_full","config":{},"middleware":["authentication","validation","logging"],"actions":[{"type":"execute_workflow","workflow":"create_entity","config":{"resulting_event":"entity_created","relationship_type":"CREATOR"}}]}'
+
+# Event with middleware group
+SET sample:event:create_entity_standard '{"event":"create_entity_standard","config":{},"middleware":["standard"],"actions":[{"type":"execute_workflow","workflow":"create_entity","config":{"resulting_event":"entity_created","relationship_type":"CREATOR"}}]}'
+
+# Event with full middleware group
+SET sample:event:create_entity_secure '{"event":"create_entity_secure","config":{},"middleware":["full"],"actions":[{"type":"execute_workflow","workflow":"create_entity","config":{"resulting_event":"entity_created","relationship_type":"CREATOR"}}]}'
+
+# 7. Middleware Configuration - Updated with proper structure
+SET middleware:config:active '[{"key":"authentication","type":"class","path":"src/middleware/middlewares/authentication.middleware"},{"key":"logging","type":"class","path":"src/middleware/middlewares/logging.middleware"},{"key":"error-handling","type":"class","path":"src/middleware/middlewares/error-handling.middleware"},{"key":"validation","type":"class","path":"src/middleware/middlewares/validation.middleware"},{"key":"rate-limiting","type":"class","path":"src/middleware/middlewares/rate-limiting.middleware"},{"key":"standard","type":"group","keys":["authentication","logging"]},{"key":"full","type":"group","keys":["authentication","logging","validation","error-handling","rate-limiting"]}]'
+
+# VERIFICATION COMMANDS (run these to check your setup):
+# GET workflow:create_entity
+# HGETALL workflow:create_entity:workers
+# SMEMBERS crux:component:create_entity_worker:instances  
+# HGETALL crux:component:create_entity_worker:instance:002
+# GET sample:event:create_entity_websocket
+# GET sample:event:create_entity_standard
+# GET sample:event:create_entity_full
+# GET middleware:config:active
+
+# TESTING COMMANDS (check worker queues after routing):
+# LRANGE worker_instance:crux:component:create_entity_worker:instance:002:queue 0 -1
+# LRANGE worker_instance:crux:component:create_entity_worker_2:instance:001:queue 0 -1
+# LRANGE worker_instance:crux:component:create_entity_worker_3:instance:001:queue 0 -1

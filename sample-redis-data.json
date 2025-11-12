@@ -1,0 +1,339 @@
+{
+  "workflow_definition": {
+    "key": "workflow:create_entity",
+    "data": {
+      "id": "create_entity",
+      "name": "Create Entity Workflow",
+      "description": "Complete workflow for creating new entities in the system",
+      "version": "1.0",
+      "status": "active",
+      "steps": [
+        {
+          "id": "validate_input",
+          "name": "Validate Input Data",
+          "type": "validation",
+          "worker_type": "validation",
+          "config": {
+            "required_fields": ["name", "type", "attributes"],
+            "validation_rules": {
+              "name": {"min_length": 1, "max_length": 100},
+              "type": {"allowed_values": ["user", "product", "order", "category"]},
+              "attributes": {"type": "object"}
+            }
+          },
+          "timeout_seconds": 30,
+          "retry_policy": {
+            "max_attempts": 3,
+            "backoff_strategy": "exponential"
+          },
+          "next_step": "process_entity"
+        },
+        {
+          "id": "process_entity",
+          "name": "Process Entity Creation",
+          "type": "processing", 
+          "worker_type": "processing",
+          "config": {
+            "database_operation": "create",
+            "table": "entities",
+            "generate_id": true,
+            "timestamps": true,
+            "audit_log": true
+          },
+          "timeout_seconds": 60,
+          "retry_policy": {
+            "max_attempts": 2,
+            "backoff_strategy": "linear"
+          },
+          "next_step": "notify_completion"
+        },
+        {
+          "id": "notify_completion",
+          "name": "Send Completion Notification",
+          "type": "notification",
+          "worker_type": "notification", 
+          "config": {
+            "notification_type": "websocket",
+            "channels": ["entity_created", "admin_notifications"],
+            "include_entity_data": true,
+            "email_notification": false
+          },
+          "timeout_seconds": 15,
+          "retry_policy": {
+            "max_attempts": 3,
+            "backoff_strategy": "exponential"
+          },
+          "next_step": null
+        }
+      ],
+      "created_at": "2025-10-15T10:30:00Z",
+      "updated_at": "2025-10-15T10:30:00Z"
+    }
+  },
+  "workers": [
+    {
+      "key": "worker:validation_worker_001",
+      "data": {
+        "id": "validation_worker_001",
+        "name": "Validation Worker 1",
+        "type": "validation",
+        "status": "active",
+        "thread_capacity": 10,
+        "current_thread_count": 0,
+        "max_concurrent_tasks": 10,
+        "supported_workflows": ["create_entity", "update_entity", "delete_entity"],
+        "capabilities": ["input_validation", "schema_validation", "business_rules"],
+        "health_check_url": "http://validation-worker-001:3001/health",
+        "last_heartbeat": "2025-10-15T10:30:00Z",
+        "created_at": "2025-10-15T10:25:00Z",
+        "performance_metrics": {
+          "avg_processing_time_ms": 150,
+          "success_rate": 99.5,
+          "error_rate": 0.5,
+          "total_tasks_processed": 15420,
+          "tasks_processed_today": 156
+        },
+        "configuration": {
+          "validation_timeout": 30,
+          "strict_mode": true,
+          "custom_validators": ["email", "phone", "credit_card"]
+        }
+      }
+    },
+    {
+      "key": "worker:processing_worker_001",
+      "data": {
+        "id": "processing_worker_001", 
+        "name": "Processing Worker 1",
+        "type": "processing",
+        "status": "active",
+        "thread_capacity": 8,
+        "current_thread_count": 2,
+        "max_concurrent_tasks": 8,
+        "supported_workflows": ["create_entity", "update_entity"],
+        "capabilities": ["database_operations", "data_transformation", "business_logic"],
+        "health_check_url": "http://processing-worker-001:3002/health",
+        "last_heartbeat": "2025-10-15T10:30:00Z",
+        "created_at": "2025-10-15T10:25:00Z", 
+        "performance_metrics": {
+          "avg_processing_time_ms": 500,
+          "success_rate": 98.8,
+          "error_rate": 1.2,
+          "total_tasks_processed": 8920,
+          "tasks_processed_today": 89
+        },
+        "configuration": {
+          "database_pool_size": 5,
+          "transaction_timeout": 60,
+          "enable_caching": true,
+          "cache_ttl": 300
+        }
+      }
+    },
+    {
+      "key": "worker:notification_worker_001",
+      "data": {
+        "id": "notification_worker_001",
+        "name": "Notification Worker 1", 
+        "type": "notification",
+        "status": "active",
+        "thread_capacity": 15,
+        "current_thread_count": 1,
+        "max_concurrent_tasks": 15,
+        "supported_workflows": ["create_entity", "update_entity", "delete_entity", "system_notifications"],
+        "capabilities": ["websocket_notifications", "email_notifications", "sms_notifications"],
+        "health_check_url": "http://notification-worker-001:3003/health",
+        "last_heartbeat": "2025-10-15T10:30:00Z",
+        "created_at": "2025-10-15T10:25:00Z",
+        "performance_metrics": {
+          "avg_processing_time_ms": 200,
+          "success_rate": 99.9,
+          "error_rate": 0.1, 
+          "total_tasks_processed": 25630,
+          "tasks_processed_today": 234
+        },
+        "configuration": {
+          "websocket_pool_size": 100,
+          "email_provider": "sendgrid",
+          "sms_provider": "twilio",
+          "notification_retry_count": 3
+        }
+      }
+    }
+  ],
+  "sample_websocket_event": {
+    "key": "sample:event:create_entity",
+    "data": {
+      "event_id": "evt_123456789",
+      "event_type": "create_entity",
+      "workflow_id": "create_entity", 
+      "timestamp": "2025-10-15T10:30:00Z",
+      "source": "web_client",
+      "client_id": "client_web_001",
+      "session_id": "sess_abc123def456",
+      "user_id": "user_456",
+      "payload": {
+        "entity": {
+          "name": "Premium Wireless Headphones",
+          "type": "product",
+          "attributes": {
+            "category": "electronics",
+            "subcategory": "audio",
+            "price": 299.99,
+            "currency": "USD",
+            "description": "High-quality wireless headphones with noise cancellation",
+            "sku": "HEADPHONES-2025-001",
+            "brand": "TechCorp",
+            "model": "WH-1000XM6",
+            "tags": ["electronics", "audio", "wireless", "premium"],
+            "specifications": {
+              "weight": "250g",
+              "battery_life": "30 hours",
+              "connectivity": "Bluetooth 5.3",
+              "noise_cancellation": true,
+              "warranty": "2 years",
+              "colors": ["black", "silver", "blue"]
+            },
+            "inventory": {
+              "stock_quantity": 100,
+              "reorder_level": 20,
+              "supplier_id": "supplier_789"
+            }
+          }
+        },
+        "metadata": {
+          "created_by": "user_456",
+          "department": "product_management",
+          "priority": "normal",
+          "source_system": "admin_panel",
+          "ip_address": "192.168.1.100",
+          "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+      },
+      "routing": {
+        "target_workers": ["validation", "processing", "notification"],
+        "processing_mode": "sequential",
+        "timeout_seconds": 300,
+        "retry_policy": {
+          "max_attempts": 3,
+          "backoff_strategy": "exponential",
+          "initial_delay_ms": 1000
+        },
+        "priority": "normal"
+      }
+    }
+  },
+  "middleware_config": {
+    "key": "middleware:config:active",
+    "data": {
+      "version": "1.2.0",
+      "last_updated": "2025-10-15T10:30:00Z",
+      "middlewares": [
+        {
+          "id": "auth_middleware",
+          "name": "Authentication Middleware",
+          "enabled": true,
+          "order": 1,
+          "config": {
+            "require_auth": true,
+            "allowed_roles": ["admin", "user", "system"],
+            "jwt_validation": true,
+            "session_validation": true,
+            "api_key_validation": false
+          }
+        },
+        {
+          "id": "rate_limit_middleware",
+          "name": "Rate Limiting Middleware", 
+          "enabled": true,
+          "order": 2,
+          "config": {
+            "requests_per_minute": 100,
+            "burst_limit": 20,
+            "key_strategy": "client_id",
+            "whitelist": ["admin", "system"]
+          }
+        },
+        {
+          "id": "validation_middleware",
+          "name": "Event Validation Middleware",
+          "enabled": true,
+          "order": 3,
+          "config": {
+            "validate_schema": true,
+            "validate_payload": true,
+            "required_fields": ["event_type", "payload"],
+            "max_payload_size": "10MB"
+          }
+        },
+        {
+          "id": "logging_middleware", 
+          "name": "Event Logging Middleware",
+          "enabled": true,
+          "order": 4,
+          "config": {
+            "log_level": "info",
+            "include_payload": true,
+            "log_destination": "redis_stream",
+            "retention_days": 30
+          }
+        }
+      ]
+    }
+  },
+  "worker_registry": {
+    "sets": {
+      "workers:active": ["validation_worker_001", "processing_worker_001", "notification_worker_001"],
+      "workers:by_type:validation": ["validation_worker_001"],
+      "workers:by_type:processing": ["processing_worker_001"], 
+      "workers:by_type:notification": ["notification_worker_001"]
+    }
+  },
+  "system_config": {
+    "load_balancer": {
+      "key": "load_balancer:config",
+      "data": {
+        "strategy": "round_robin",
+        "health_check_interval": 30,
+        "max_failures_before_removal": 3,
+        "worker_timeout_seconds": 60,
+        "enable_circuit_breaker": true,
+        "circuit_breaker_threshold": 5,
+        "recovery_time_seconds": 300
+      }
+    },
+    "system_metrics": {
+      "key": "system:metrics", 
+      "data": {
+        "total_workers": 3,
+        "active_workers": 3,
+        "total_thread_capacity": 33,
+        "current_thread_usage": 3,
+        "avg_cpu_usage": 45.2,
+        "avg_memory_usage": 62.8,
+        "last_updated": "2025-10-15T10:30:00Z"
+      }
+    }
+  },
+  "sample_task_queue": {
+    "key": "queue:create_entity:pending",
+    "data": [
+      {
+        "task_id": "task_001",
+        "event_id": "evt_123456789",
+        "workflow_id": "create_entity", 
+        "step_id": "validate_input",
+        "worker_type": "validation",
+        "priority": "normal",
+        "created_at": "2025-10-15T10:30:00Z",
+        "scheduled_at": "2025-10-15T10:30:05Z",
+        "payload": {
+          "entity": {
+            "name": "Premium Wireless Headphones",
+            "type": "product"
+          }
+        }
+      }
+    ]
+  }
+}

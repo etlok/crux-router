@@ -18,7 +18,7 @@ async function bootstrap() {
     const redisIoAdapter = new redisio_adapter_1.RedisIoAdapter(app);
     await redisIoAdapter.connectToRedis();
     app.useWebSocketAdapter(redisIoAdapter);
-    await app.listen(3000);
+    await app.listen(4000);
 }
 bootstrap();
 //# sourceMappingURL=main.js.map

@@ -2,6 +2,7 @@
   "activeMiddlewares": [
     "auth",
     "log",
-    "errorHandling"
+    "errorHandling",
+    "channelSubscription"
   ]
 }

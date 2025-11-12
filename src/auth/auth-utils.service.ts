@@ -19,9 +19,17 @@ export class AuthUtilsService {
     userId: string,
     additionalClaims: Record<string, any> = {},
   ): string {
+    // Include some default entities for testing
+    const defaultClaims = {
+      entities: ['entity1', 'entity2'],  // Example entity IDs
+      roles: ['user'],
+      permissions: ['read', 'write']
+    };
+
     return this.jwtService.sign(
       {
         sub: userId,
+        ...defaultClaims,
         ...additionalClaims,
       },
       {

@@ -22,6 +22,7 @@ require("./middlewares/logging.middleware");
 require("./middlewares/rate-limiting.middleware");
 require("./middlewares/validation.middleware");
 require("./middlewares/error-handling.middleware");
+require("./middlewares/channel-subscription.middleware");
 let MiddlewareModule = class MiddlewareModule {
     configure(consumer) {
         consumer

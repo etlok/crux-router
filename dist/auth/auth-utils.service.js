@@ -21,8 +21,14 @@ let AuthUtilsService = class AuthUtilsService {
         this.configService = configService;
     }
     generateTestToken(userId, additionalClaims = {}) {
+        const defaultClaims = {
+            entities: ['entity1', 'entity2'],
+            roles: ['user'],
+            permissions: ['read', 'write']
+        };
         return this.jwtService.sign({
             sub: userId,
+            ...defaultClaims,
             ...additionalClaims,
         }, {
             secret: this.configService.get('jwt.secret'),

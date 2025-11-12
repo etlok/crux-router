@@ -15,6 +15,7 @@ import './middlewares/logging.middleware';
 import './middlewares/rate-limiting.middleware';
 import './middlewares/validation.middleware';
 import './middlewares/error-handling.middleware';
+import './middlewares/channel-subscription.middleware';
 
 @Module({
   imports: [
